@@ -23,7 +23,9 @@ import {
   Check,
   XCircle,
   Building2,
-  MapPin
+  MapPin,
+  Phone,
+  Mail
 } from 'lucide-react';
 
 interface SchoolPortalProps {
@@ -127,11 +129,11 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
     }
   }, [formData]);
 
-  // Filtro de escolas pertencentes à CRE com refinamento por busca de texto
+  // Filtro de escolas pertencentes à CRE com refinamento por busca de texto (Nome, CEP ou Endereço)
   const filteredSchoolsInCre = creSchools.filter(
     (s) =>
       s.name.toLowerCase().includes(schoolSearch.toLowerCase()) ||
-      s.inep.includes(schoolSearch) ||
+      (s.cep && s.cep.replace(/[^\d]/g, '').includes(schoolSearch.replace(/[^\d]/g, ''))) ||
       s.address.toLowerCase().includes(schoolSearch.toLowerCase())
   );
 
@@ -463,7 +465,7 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                             type="text"
                             value={schoolSearch}
                             onChange={(e) => setSchoolSearch(e.target.value)}
-                            placeholder="Filtrar por nome ou INEP nesta regional..."
+                            placeholder="Buscar por nome da escola, endereço ou CEP..."
                             className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                           />
                         </div>
@@ -477,7 +479,7 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                         >
                           {filteredSchoolsInCre.map((sch) => (
                             <option key={sch.id} value={sch.id}>
-                              {sch.name} (INEP: {sch.inep})
+                              {sch.name}
                             </option>
                           ))}
                         </select>
@@ -487,20 +489,58 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                       </div>
                     </div>
 
-                    {/* Card de Confirmação da Escola Selecionada */}
+                    {/* Card de Confirmação & Ficha Técnica da Escola Selecionada */}
                     {selectedSchool && (
-                      <div className="p-3.5 bg-blue-50/70 rounded-xl border border-blue-200 text-xs text-blue-900 flex items-start gap-2.5">
-                        <Building2 size={18} className="text-blue-600 shrink-0 mt-0.5" />
-                        <div className="space-y-0.5">
-                          <div className="font-bold text-slate-900 flex items-center gap-2">
-                            <span>{selectedSchool.name}</span>
-                            <span className="bg-blue-200/70 text-blue-800 text-[10px] px-2 py-0.2 rounded font-mono font-semibold">
-                              INEP {selectedSchool.inep}
-                            </span>
+                      <div className="p-4 bg-gradient-to-br from-blue-50/90 via-slate-50 to-indigo-50/70 rounded-2xl border border-blue-200/80 shadow-sm text-xs text-slate-800 transition-all">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-blue-200/60">
+                          <div className="flex items-center gap-2.5">
+                            <div className="p-2 bg-blue-600 text-white rounded-xl shadow-sm shrink-0">
+                              <Building2 size={18} />
+                            </div>
+                            <div>
+                              <h3 className="font-extrabold text-sm text-slate-900 leading-tight">
+                                {selectedSchool.name}
+                              </h3>
+                              <p className="text-[11px] text-blue-700 font-semibold">
+                                Coordenação Regional de Ensino: <strong>CRE {selectedSchool.cre_name}</strong>
+                              </p>
+                            </div>
                           </div>
-                          <div className="text-[11px] text-slate-600 flex items-center gap-1">
-                            <MapPin size={12} className="text-slate-400" />
-                            {selectedSchool.address} • <strong>CRE {selectedSchool.cre_name}</strong>
+                          {selectedSchool.cep && (
+                            <span className="self-start sm:self-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-blue-200 text-blue-800 text-[11px] font-mono font-bold shadow-2xs">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                              CEP: {selectedSchool.cep}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Detalhes de Endereço, Geolocalização e Contato */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 pt-3">
+                          <div className="md:col-span-2 flex items-start gap-1.5 text-slate-700">
+                            <MapPin size={15} className="text-blue-500 shrink-0 mt-0.5" />
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                                Endereço Oficial
+                              </span>
+                              <span className="text-xs font-medium text-slate-800">
+                                {selectedSchool.address}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col gap-1.5 bg-white/80 p-2.5 rounded-xl border border-slate-200/70">
+                            <div className="flex items-center gap-1.5 text-slate-700">
+                              <Phone size={13} className="text-emerald-600 shrink-0" />
+                              <span className="text-[11px] font-semibold text-slate-800">
+                                {selectedSchool.contact_phone || '(61) 3901-2000'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-slate-600 truncate">
+                              <Mail size={13} className="text-blue-500 shrink-0" />
+                              <span className="text-[10.5px] font-mono text-slate-700 truncate" title={selectedSchool.contact_email}>
+                                {selectedSchool.contact_email}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>

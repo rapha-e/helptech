@@ -1,3 +1,5 @@
+import { OFFICIAL_SCHOOLS } from './schoolsCatalog';
+
 export interface RegionalCoordination {
   id: string;
   code: string;
@@ -9,9 +11,10 @@ export interface School {
   id: string;
   cre_id: string;
   cre_name: string;
-  inep: string;
+  inep?: string;
   name: string;
   address: string;
+  cep?: string;
   latitude: number;
   longitude: number;
   contact_phone: string;
@@ -146,7 +149,6 @@ export const REGIONAL_COORDINATIONS: RegionalCoordination[] = [
   { id: 'cre-guar', code: 'CRE_GUARA', name: 'Guará', active: true },
   { id: 'cre-nban', code: 'CRE_NUCLEO_BANDEIRANTE', name: 'Núcleo Bandeirante', active: true },
   { id: 'cre-para', code: 'CRE_PARANOA', name: 'Paranoá', active: true },
-  { id: 'cre-pita', code: 'CRE_PARANOA_ITAPOA', name: 'Paranoá/Itapoã', active: true },
   { id: 'cre-plan', code: 'CRE_PLANALTINA', name: 'Planaltina', active: true },
   { id: 'cre-ppil', code: 'CRE_PLANO_PILOTO', name: 'Plano Piloto', active: true },
   { id: 'cre-rema', code: 'CRE_RECANTO_DAS_EMAS', name: 'Recanto das Emas', active: true },
@@ -166,63 +168,19 @@ export const TICKET_CATEGORIES: TicketCategory[] = [
   { id: 'cat-ele', name: 'Elétrica de TI / No-breaks & Nobreaks', sla_response_hours: 2, sla_resolution_hours: 24 }
 ];
 
-export const SCHOOLS: School[] = [
-  // Brazlândia
-  { id: 'sch-53005023', cre_id: 'cre-braz', cre_name: 'Brazlândia', inep: '53005023', name: 'CED 02 DE BRAZLÂNDIA', address: 'Quadra 02, Brazlândia, DF', latitude: -15.6766, longitude: -48.2046, contact_phone: '(61) 3901-3420', contact_email: 'ced02.brazlandia@se.df.gov.br' },
-  { id: 'sch-53005171', cre_id: 'cre-braz', cre_name: 'Brazlândia', inep: '53005171', name: 'CED 04 DE BRAZLANDIA', address: 'Setor Sul, Brazlândia, DF', latitude: -15.6710, longitude: -48.2010, contact_phone: '(61) 3901-3421', contact_email: 'ced04.brazlandia@se.df.gov.br' },
-  { id: 'sch-53004981', cre_id: 'cre-braz', cre_name: 'Brazlândia', inep: '53004981', name: 'CED INCRA 08', address: 'Zona Rural Incra 08, Brazlândia, DF', latitude: -15.6890, longitude: -48.2230, contact_phone: '(61) 3901-3422', contact_email: 'ced.incra08@se.df.gov.br' },
-  { id: 'sch-53005210', cre_id: 'cre-braz', cre_name: 'Brazlândia', inep: '53005210', name: 'CED IRMA MARIA REGINA VELANES REGIS', address: 'Brazlândia, DF', latitude: -15.6740, longitude: -48.1990, contact_phone: '(61) 3901-3423', contact_email: 'ced.regina@se.df.gov.br' },
-  { id: 'sch-50035007', cre_id: 'cre-braz', cre_name: 'Brazlândia', inep: '50035007', name: 'CED VEREDINHA', address: 'Veredinha, Brazlândia, DF', latitude: -15.6650, longitude: -48.1920, contact_phone: '(61) 3901-3424', contact_email: 'ced.veredinha@se.df.gov.br' },
-  { id: 'sch-53005090', cre_id: 'cre-braz', cre_name: 'Brazlândia', inep: '53005090', name: 'CEF 02 DE BRAZLANDIA', address: 'Brazlândia, DF', latitude: -15.6780, longitude: -48.2030, contact_phone: '(61) 3901-3425', contact_email: 'cef02.brazlandia@se.df.gov.br' },
-  { id: 'sch-53014553', cre_id: 'cre-braz', cre_name: 'Brazlândia', inep: '53014553', name: 'CEF 03 DE BRAZLANDIA', address: 'Brazlândia, DF', latitude: -15.6730, longitude: -48.2080, contact_phone: '(61) 3901-3426', contact_email: 'cef03.brazlandia@se.df.gov.br' },
-  { id: 'sch-53005198', cre_id: 'cre-braz', cre_name: 'Brazlândia', inep: '53005198', name: 'CEF INCRA 07', address: 'Incra 07, Brazlândia, DF', latitude: -15.7010, longitude: -48.2150, contact_phone: '(61) 3901-3427', contact_email: 'cef.incra07@se.df.gov.br' },
-  { id: 'sch-53005015', cre_id: 'cre-braz', cre_name: 'Brazlândia', inep: '53005015', name: 'CEM 01 DE BRAZLANDIA', address: 'Brazlândia, DF', latitude: -15.6795, longitude: -48.2025, contact_phone: '(61) 3901-3428', contact_email: 'cem01.brazlandia@se.df.gov.br' },
-  { id: 'sch-53012720', cre_id: 'cre-braz', cre_name: 'Brazlândia', inep: '53012720', name: 'CENTRO DE ENSINO MÉDIO 02 DE BRAZLÂNDIA', address: 'Brazlândia, DF', latitude: -15.6725, longitude: -48.2065, contact_phone: '(61) 3901-3429', contact_email: 'cem02.brazlandia@se.df.gov.br' },
-
-  // Ceilândia
-  { id: 'sch-53003012', cre_id: 'cre-ceil', cre_name: 'Ceilândia', inep: '53003012', name: 'CED 03 DE CEILÂNDIA', address: 'QNM 13, Ceilândia Norte, DF', latitude: -15.8115, longitude: -48.1120, contact_phone: '(61) 3901-6801', contact_email: 'ced03.ceilandia@se.df.gov.br' },
-  { id: 'sch-53003045', cre_id: 'cre-ceil', cre_name: 'Ceilândia', inep: '53003045', name: 'CED 07 DE CEILÂNDIA', address: 'QNO 18, Ceilândia Norte, DF', latitude: -15.7980, longitude: -48.1250, contact_phone: '(61) 3901-6802', contact_email: 'ced07.ceilandia@se.df.gov.br' },
-  { id: 'sch-53003080', cre_id: 'cre-ceil', cre_name: 'Ceilândia', inep: '53003080', name: 'CEM 02 DE CEILÂNDIA', address: 'QNP 05, P Sul, Ceilândia, DF', latitude: -15.8340, longitude: -48.1340, contact_phone: '(61) 3901-6803', contact_email: 'cem02.ceilandia@se.df.gov.br' },
-  { id: 'sch-53003110', cre_id: 'cre-ceil', cre_name: 'Ceilândia', inep: '53003110', name: 'CEF 26 DE CEILÂNDIA', address: 'QNM 24, Ceilândia, DF', latitude: -15.8180, longitude: -48.1060, contact_phone: '(61) 3901-6804', contact_email: 'cef26.ceilandia@se.df.gov.br' },
-  { id: 'sch-53003150', cre_id: 'cre-ceil', cre_name: 'Ceilândia', inep: '53003150', name: 'ESCOLA CLASSE 18 DE CEILÂNDIA', address: 'QNN 08, Ceilândia Sul, DF', latitude: -15.8250, longitude: -48.1080, contact_phone: '(61) 3901-6805', contact_email: 'ec18.ceilandia@se.df.gov.br' },
-
-  // Plano Piloto
-  { id: 'sch-53001010', cre_id: 'cre-ppil', cre_name: 'Plano Piloto', inep: '53001010', name: 'CENTRO EDUCACIONAL GISNO', address: 'SGAN 907, Asa Norte, Brasília, DF', latitude: -15.7660, longitude: -47.8920, contact_phone: '(61) 3901-2010', contact_email: 'ced.gisno@se.df.gov.br' },
-  { id: 'sch-53001020', cre_id: 'cre-ppil', cre_name: 'Plano Piloto', inep: '53001020', name: 'CEM ELEFANTE BRANCO (CEMEB)', address: 'SGAS 908, Asa Sul, Brasília, DF', latitude: -15.8140, longitude: -47.9040, contact_phone: '(61) 3901-2020', contact_email: 'cem.elefante@se.df.gov.br' },
-  { id: 'sch-53001030', cre_id: 'cre-ppil', cre_name: 'Plano Piloto', inep: '53001030', name: 'CED 01 DE BRASÍLIA', address: 'EQS 308/309, Asa Sul, Brasília, DF', latitude: -15.8070, longitude: -47.9010, contact_phone: '(61) 3901-2030', contact_email: 'ced01.brasilia@se.df.gov.br' },
-  { id: 'sch-53001040', cre_id: 'cre-ppil', cre_name: 'Plano Piloto', inep: '53001040', name: 'CEF 04 DE BRASÍLIA', address: 'SHCGN 712/713, Asa Norte, Brasília, DF', latitude: -15.7530, longitude: -47.8960, contact_phone: '(61) 3901-2040', contact_email: 'cef04.brasilia@se.df.gov.br' },
-
-  // Taguatinga
-  { id: 'sch-53002010', cre_id: 'cre-tagu', cre_name: 'Taguatinga', inep: '53002010', name: 'CEM 01 DE TAGUATINGA', address: 'QSB 04/05, Taguatinga Sul, DF', latitude: -15.8390, longitude: -48.0580, contact_phone: '(61) 3901-4410', contact_email: 'cem01.taguatinga@se.df.gov.br' },
-  { id: 'sch-53002020', cre_id: 'cre-tagu', cre_name: 'Taguatinga', inep: '53002020', name: 'CED 02 DE TAGUATINGA', address: 'QND 28, Taguatinga Norte, DF', latitude: -15.8210, longitude: -48.0670, contact_phone: '(61) 3901-4420', contact_email: 'ced02.taguatinga@se.df.gov.br' },
-  { id: 'sch-53002030', cre_id: 'cre-tagu', cre_name: 'Taguatinga', inep: '53002030', name: 'CEF 08 DE TAGUATINGA', address: 'QSE 03, Taguatinga Sul, DF', latitude: -15.8480, longitude: -48.0520, contact_phone: '(61) 3901-4430', contact_email: 'cef08.taguatinga@se.df.gov.br' },
-
-  // Paranoá & Itapoã
-  { id: 'sch-53016378', cre_id: 'cre-pita', cre_name: 'Paranoá/Itapoã', inep: '53016378', name: 'CED 01 ITAPOĀ', address: 'Fazenda Tamanduá, Itapoã, DF', latitude: -15.7480, longitude: -47.7720, contact_phone: '(61) 3901-7710', contact_email: 'ced01.itapoa@se.df.gov.br' },
-  { id: 'sch-53019601', cre_id: 'cre-pita', cre_name: 'Paranoá/Itapoã', inep: '53019601', name: 'CEF DOUTORA ZILDA ARNS', address: 'Quadra 378, Del Lago, Itapoã, DF', latitude: -15.7510, longitude: -47.7690, contact_phone: '(61) 3901-7720', contact_email: 'cef.zildaarns@se.df.gov.br' },
-  { id: 'sch-53019431', cre_id: 'cre-para', cre_name: 'Paranoá', inep: '53019431', name: 'CED 02 DO PARANOA', address: 'Quadra 03 Área Especial, Paranoá, DF', latitude: -15.7720, longitude: -47.7810, contact_phone: '(61) 3901-7810', contact_email: 'ced02.paranoa@se.df.gov.br' },
-  { id: 'sch-53006720', cre_id: 'cre-para', cre_name: 'Paranoá', inep: '53006720', name: 'CED DO PAD-DF', address: 'BR-251 Km 45, PAD-DF, Paranoá, DF', latitude: -15.9980, longitude: -47.5210, contact_phone: '(61) 3901-7820', contact_email: 'ced.paddf@se.df.gov.br' },
-
-  // Recanto das Emas
-  { id: 'sch-53011066', cre_id: 'cre-rema', cre_name: 'Recanto das Emas', inep: '53011066', name: 'CED 104 DO RECANTO DAS EMAS', address: 'Quadra 104, Recanto das Emas, DF', latitude: -15.9010, longitude: -48.0680, contact_phone: '(61) 3901-8810', contact_email: 'ced104.recanto@se.df.gov.br' },
-  { id: 'sch-53020120', cre_id: 'cre-rema', cre_name: 'Recanto das Emas', inep: '53020120', name: 'CED 203 DO RECANTO DAS EMAS', address: 'Quadra 203, Recanto das Emas, DF', latitude: -15.9080, longitude: -48.0720, contact_phone: '(61) 3901-8820', contact_email: 'ced203.recanto@se.df.gov.br' },
-  { id: 'sch-53012119', cre_id: 'cre-rema', cre_name: 'Recanto das Emas', inep: '53012119', name: 'CED 308 DO RECANTO DAS EMAS', address: 'Quadra 308, Recanto das Emas, DF', latitude: -15.9140, longitude: -48.0790, contact_phone: '(61) 3901-8830', contact_email: 'ced308.recanto@se.df.gov.br' },
-
-  // Santa Maria
-  { id: 'sch-53068181', cre_id: 'cre-smar', cre_name: 'Santa Maria', inep: '53068181', name: 'CED 310 DE SANTA MARIA', address: 'Quadra 310, Santa Maria, DF', latitude: -16.0120, longitude: -47.9890, contact_phone: '(61) 3901-9910', contact_email: 'ced310.santamaria@se.df.gov.br' },
-  { id: 'sch-53002474', cre_id: 'cre-smar', cre_name: 'Santa Maria', inep: '53002474', name: 'CED GESNER TEIXEIRA', address: 'Quadra 100, Santa Maria, DF', latitude: -16.0210, longitude: -47.9810, contact_phone: '(61) 3901-9920', contact_email: 'ced.gesner@se.df.gov.br' },
-
-  // Gama
-  { id: 'sch-53004010', cre_id: 'cre-gama', cre_name: 'Gama', inep: '53004010', name: 'CEM 01 DO GAMA', address: 'Setor Sul, Gama, DF', latitude: -16.0240, longitude: -48.0580, contact_phone: '(61) 3901-5510', contact_email: 'cem01.gama@se.df.gov.br' },
-  { id: 'sch-53004020', cre_id: 'cre-gama', cre_name: 'Gama', inep: '53004020', name: 'CED 03 DO GAMA', address: 'Setor Oeste, Gama, DF', latitude: -16.0180, longitude: -48.0690, contact_phone: '(61) 3901-5520', contact_email: 'ced03.gama@se.df.gov.br' },
-
-  // Sobradinho
-  { id: 'sch-53007010', cre_id: 'cre-sobr', cre_name: 'Sobradinho', inep: '53007010', name: 'CEM 01 DE SOBRADINHO', address: 'Quadra 04, Sobradinho, DF', latitude: -15.6540, longitude: -47.7890, contact_phone: '(61) 3901-3310', contact_email: 'cem01.sobradinho@se.df.gov.br' },
-  { id: 'sch-53007020', cre_id: 'cre-sobr', cre_name: 'Sobradinho', inep: '53007020', name: 'CED 02 DE SOBRADINHO', address: 'Quadra 10, Sobradinho, DF', latitude: -15.6490, longitude: -47.7950, contact_phone: '(61) 3901-3320', contact_email: 'ced02.sobradinho@se.df.gov.br' },
-
-  // Guará
-  { id: 'sch-53008010', cre_id: 'cre-guar', cre_name: 'Guará', inep: '53008010', name: 'CED 01 DO GUARÁ', address: 'QE 07, Guará I, DF', latitude: -15.8230, longitude: -47.9780, contact_phone: '(61) 3901-2210', contact_email: 'ced01.guara@se.df.gov.br' }
-];
+export const SCHOOLS: School[] = OFFICIAL_SCHOOLS.map(os => ({
+  id: os.id,
+  cre_id: os.cre_id,
+  cre_name: os.cre_name,
+  inep: os.id.replace('sch-', ''),
+  name: os.name,
+  address: os.address,
+  cep: os.cep,
+  latitude: os.latitude,
+  longitude: os.longitude,
+  contact_phone: os.contact_phone,
+  contact_email: os.contact_email
+}));
 
 export const TECHNICIANS: Technician[] = [
   {
