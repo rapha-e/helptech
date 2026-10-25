@@ -3,14 +3,16 @@ import type {
   Ticket,
   Technician,
   School,
-  TicketCategory
+  TicketCategory,
+  SystemUser
 } from '../data/seedData';
 import {
   INITIAL_TICKETS,
   TECHNICIANS,
   SCHOOLS,
   TICKET_CATEGORIES,
-  REGIONAL_COORDINATIONS
+  REGIONAL_COORDINATIONS,
+  INITIAL_SYSTEM_USERS
 } from '../data/seedData';
 import {
   getBestCandidateTechnician,
@@ -22,6 +24,7 @@ import type { TicketSubmissionData, QuoteSubmissionData, TicketCompletionData } 
 
 const TICKETS_STORAGE_KEY = 'helptechinfo_tickets_v2';
 const TECHNICIANS_STORAGE_KEY = 'helptechinfo_techs_v2';
+const USERS_STORAGE_KEY = 'helptechinfo_users_v2';
 
 export function getStoredTickets(): Ticket[] {
   try {
@@ -63,10 +66,31 @@ export function saveStoredTechnicians(techs: Technician[]) {
   }
 }
 
+export function getStoredSystemUsers(): SystemUser[] {
+  try {
+    const raw = localStorage.getItem(USERS_STORAGE_KEY);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (err) {
+    console.error('Falha ao ler usuários do storage:', err);
+  }
+  return INITIAL_SYSTEM_USERS;
+}
+
+export function saveStoredSystemUsers(users: SystemUser[]) {
+  try {
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+  } catch (err) {
+    console.error('Falha ao persistir usuários:', err);
+  }
+}
+
 // Hook principal de gerenciamento do ecossistema de dados
 export function useAppStore() {
   const [tickets, setTickets] = useState<Ticket[]>(getStoredTickets);
   const [technicians, setTechnicians] = useState<Technician[]>(getStoredTechnicians);
+  const [systemUsers, setSystemUsers] = useState<SystemUser[]>(getStoredSystemUsers);
   const [schools] = useState<School[]>(SCHOOLS);
   const [categories] = useState<TicketCategory[]>(TICKET_CATEGORIES);
   const [regions] = useState(REGIONAL_COORDINATIONS);
@@ -78,6 +102,10 @@ export function useAppStore() {
   useEffect(() => {
     saveStoredTechnicians(technicians);
   }, [technicians]);
+
+  useEffect(() => {
+    saveStoredSystemUsers(systemUsers);
+  }, [systemUsers]);
 
   // Checa periodicamente se há chamados despachados cujo timeout de 20 min expirou
   useEffect(() => {
@@ -727,18 +755,89 @@ export function useAppStore() {
   };
 
   /**
+   * 13. CRUD de Técnicos de Campo
+   */
+  const createTechnician = (techData: Omit<Technician, 'id'>) => {
+    const newTech: Technician = {
+      ...techData,
+      id: `tech-${Date.now().toString(36)}`
+    };
+    setTechnicians((prev) => [newTech, ...prev]);
+    return newTech;
+  };
+
+  const updateTechnician = (id: string, updates: Partial<Technician>) => {
+    setTechnicians((prev) =>
+      prev.map((tech) => (tech.id === id ? { ...tech, ...updates } : tech))
+    );
+  };
+
+  const deleteTechnician = (id: string) => {
+    setTechnicians((prev) => prev.filter((tech) => tech.id !== id));
+  };
+
+  const toggleTechnicianStatus = (id: string) => {
+    setTechnicians((prev) =>
+      prev.map((tech) => {
+        if (tech.id === id) {
+          const nextStatus = tech.status === 'disponivel' ? 'indisponivel' : 'disponivel';
+          return { ...tech, status: nextStatus };
+        }
+        return tech;
+      })
+    );
+  };
+
+  /**
+   * 14. CRUD de Administradores / Usuários do Sistema
+   */
+  const createSystemUser = (userData: Omit<SystemUser, 'id' | 'created_at'>) => {
+    const newUser: SystemUser = {
+      ...userData,
+      id: `usr-${Date.now().toString(36)}`,
+      created_at: new Date().toISOString()
+    };
+    setSystemUsers((prev) => [newUser, ...prev]);
+    return newUser;
+  };
+
+  const updateSystemUser = (id: string, updates: Partial<SystemUser>) => {
+    setSystemUsers((prev) =>
+      prev.map((usr) => (usr.id === id ? { ...usr, ...updates } : usr))
+    );
+  };
+
+  const deleteSystemUser = (id: string) => {
+    setSystemUsers((prev) => prev.filter((usr) => usr.id !== id));
+  };
+
+  const toggleSystemUserActive = (id: string) => {
+    setSystemUsers((prev) =>
+      prev.map((usr) => {
+        if (usr.id === id) {
+          return { ...usr, active: !usr.active };
+        }
+        return usr;
+      })
+    );
+  };
+
+  /**
    * Restaura o banco de dados local para o estado padrão
    */
   const resetDatabase = () => {
     setTickets(INITIAL_TICKETS);
     setTechnicians(TECHNICIANS);
+    setSystemUsers(INITIAL_SYSTEM_USERS);
     saveStoredTickets(INITIAL_TICKETS);
     saveStoredTechnicians(TECHNICIANS);
+    saveStoredSystemUsers(INITIAL_SYSTEM_USERS);
   };
 
   return {
     tickets,
     technicians,
+    systemUsers,
     schools,
     categories,
     regions,
@@ -754,6 +853,14 @@ export function useAppStore() {
     setWaitingThirdParty,
     resumeService,
     manualDispatch,
+    createTechnician,
+    updateTechnician,
+    deleteTechnician,
+    toggleTechnicianStatus,
+    createSystemUser,
+    updateSystemUser,
+    deleteSystemUser,
+    toggleSystemUserActive,
     resetDatabase
   };
 }

@@ -36,6 +36,16 @@ export interface Technician {
   active: boolean;
 }
 
+export interface SystemUser {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: 'admin' | 'controladoria' | 'auditor_seedf';
+  active: boolean;
+  created_at: string;
+}
+
 export interface TicketCategory {
   id: string;
   name: string;
@@ -271,6 +281,36 @@ export const TECHNICIANS: Technician[] = [
     max_active_tickets: 4,
     status: 'disponivel',
     active: true
+  }
+];
+
+export const INITIAL_SYSTEM_USERS: SystemUser[] = [
+  {
+    id: 'user-admin-1',
+    name: 'Raphael Gestão HelpTech',
+    email: 'raphael.gestao@helptech.com.br',
+    phone: '(61) 98111-2233',
+    role: 'admin',
+    active: true,
+    created_at: '2026-01-15T08:00:00Z'
+  },
+  {
+    id: 'user-ctrl-1',
+    name: 'Mariana Castro (Despachante Central)',
+    email: 'mariana.despacho@helptech.com.br',
+    phone: '(61) 99222-3344',
+    role: 'controladoria',
+    active: true,
+    created_at: '2026-02-01T08:30:00Z'
+  },
+  {
+    id: 'user-seedf-1',
+    name: 'Dr. Fernando Lins (Fiscal SEEDF)',
+    email: 'fernando.lins@se.df.gov.br',
+    phone: '(61) 3901-8000',
+    role: 'auditor_seedf',
+    active: true,
+    created_at: '2026-01-20T09:00:00Z'
   }
 ];
 

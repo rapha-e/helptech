@@ -4,7 +4,8 @@ import type {
   Technician,
   School,
   RegionalCoordination,
-  TicketCategory
+  TicketCategory,
+  SystemUser
 } from '../data/seedData';
 import { getBestCandidateTechnician } from '../lib/geoEngine';
 import {
@@ -18,39 +19,192 @@ import {
   CheckCircle2,
   Filter,
   DollarSign,
-  Download
+  Download,
+  Plus,
+  Trash2,
+  Edit,
+  Shield,
+  Wrench,
+  MapPin,
+  Phone,
+  Mail,
+  Search,
+  X
 } from 'lucide-react';
 
 interface CentralAdminDashboardProps {
   tickets: Ticket[];
   technicians: Technician[];
+  systemUsers?: SystemUser[];
   schools: School[];
   regions: RegionalCoordination[];
   categories: TicketCategory[];
   onManualDispatch: (ticketId: string, techId: string) => void;
   onDecideQuote: (ticketId: string, approved: boolean, name: string, reason?: string) => void;
   onViewOS: (ticket: Ticket) => void;
+  onCreateTechnician?: (tech: Omit<Technician, 'id'>) => void;
+  onUpdateTechnician?: (id: string, tech: Partial<Technician>) => void;
+  onDeleteTechnician?: (id: string) => void;
+  onToggleTechnicianStatus?: (id: string) => void;
+  onCreateSystemUser?: (user: Omit<SystemUser, 'id' | 'created_at'>) => void;
+  onUpdateSystemUser?: (id: string, user: Partial<SystemUser>) => void;
+  onDeleteSystemUser?: (id: string) => void;
+  onToggleSystemUserActive?: (id: string) => void;
   onResetDatabase: () => void;
 }
 
 export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   tickets,
   technicians,
+  systemUsers = [],
   schools,
   regions,
   categories: _categories,
   onManualDispatch,
   onDecideQuote: _onDecideQuote,
   onViewOS,
+  onCreateTechnician,
+  onUpdateTechnician,
+  onDeleteTechnician,
+  onToggleTechnicianStatus,
+  onCreateSystemUser,
+  onUpdateSystemUser,
+  onDeleteSystemUser,
+  onToggleSystemUserActive,
   onResetDatabase
 }) => {
-  const [activeTab, setActiveTab] = useState<'kanban' | 'prestacao' | 'despacho' | 'sql'>('kanban');
+  const [activeTab, setActiveTab] = useState<'kanban' | 'prestacao' | 'despacho' | 'tecnicos' | 'usuarios' | 'sql'>('kanban');
   const [selectedCre, setSelectedCre] = useState<string>('todas');
   const [selectedUrgency, setSelectedUrgency] = useState<string>('todas');
 
   // Estado para simulação de despacho
   const [simSchoolId, setSimSchoolId] = useState<string>(schools[0]?.id || '');
   const [manualDispatchTechId, setManualDispatchTechId] = useState<Record<string, string>>({});
+
+  // Estados para Gestão de Técnicos (CRUD)
+  const [searchTech, setSearchTech] = useState('');
+  const [filterCreTech, setFilterCreTech] = useState('todas');
+  const [showTechModal, setShowTechModal] = useState(false);
+  const [editingTech, setEditingTech] = useState<Technician | null>(null);
+  const [techForm, setTechForm] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    primary_cre_id: 'cre-tagu',
+    latitude: -15.8340,
+    longitude: -48.0560,
+    radius_km: 30,
+    max_active_tickets: 4,
+    status: 'disponivel' as Technician['status'],
+    active: true
+  });
+
+  // Estados para Gestão de Administradores / Usuários (CRUD)
+  const [searchUser, setSearchUser] = useState('');
+  const [filterRoleUser, setFilterRoleUser] = useState('todas');
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<SystemUser | null>(null);
+  const [userForm, setUserForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    role: 'controladoria' as SystemUser['role'],
+    active: true
+  });
+
+  const handleOpenTechModal = (tech?: Technician) => {
+    if (tech) {
+      setEditingTech(tech);
+      setTechForm({
+        name: tech.name,
+        phone: tech.phone,
+        email: tech.email,
+        primary_cre_id: tech.primary_cre_id,
+        latitude: tech.latitude,
+        longitude: tech.longitude,
+        radius_km: tech.radius_km,
+        max_active_tickets: tech.max_active_tickets,
+        status: tech.status,
+        active: tech.active
+      });
+    } else {
+      setEditingTech(null);
+      setTechForm({
+        name: '',
+        phone: '',
+        email: '',
+        primary_cre_id: regions[0]?.id || 'cre-tagu',
+        latitude: -15.7940,
+        longitude: -47.8820,
+        radius_km: 30,
+        max_active_tickets: 4,
+        status: 'disponivel',
+        active: true
+      });
+    }
+    setShowTechModal(true);
+  };
+
+  const handleSaveTech = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!techForm.name.trim() || !techForm.phone.trim() || !techForm.email.trim()) {
+      alert('Por favor, preencha todos os campos obrigatórios.');
+      return;
+    }
+    const regionObj = regions.find((r) => r.id === techForm.primary_cre_id);
+    const primary_cre_name = regionObj ? regionObj.name : 'Plano Piloto';
+
+    if (editingTech && onUpdateTechnician) {
+      onUpdateTechnician(editingTech.id, {
+        ...techForm,
+        primary_cre_name
+      });
+    } else if (onCreateTechnician) {
+      onCreateTechnician({
+        ...techForm,
+        primary_cre_name
+      });
+    }
+    setShowTechModal(false);
+  };
+
+  const handleOpenUserModal = (user?: SystemUser) => {
+    if (user) {
+      setEditingUser(user);
+      setUserForm({
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        active: user.active
+      });
+    } else {
+      setEditingUser(null);
+      setUserForm({
+        name: '',
+        email: '',
+        phone: '',
+        role: 'controladoria',
+        active: true
+      });
+    }
+    setShowUserModal(true);
+  };
+
+  const handleSaveUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userForm.name.trim() || !userForm.email.trim() || !userForm.phone.trim()) {
+      alert('Por favor, preencha todos os campos obrigatórios.');
+      return;
+    }
+
+    if (editingUser && onUpdateSystemUser) {
+      onUpdateSystemUser(editingUser.id, userForm);
+    } else if (onCreateSystemUser) {
+      onCreateSystemUser(userForm);
+    }
+    setShowUserModal(false);
+  };
 
   // Filtros aplicados aos chamados
   const filteredTickets = tickets.filter((t) => {
@@ -223,6 +377,26 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
             }`}
           >
             <Cpu size={14} /> Motor de Despacho Geo
+          </button>
+          <button
+            onClick={() => setActiveTab('tecnicos')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors ${
+              activeTab === 'tecnicos'
+                ? 'bg-blue-600 text-white shadow'
+                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <Wrench size={14} /> Técnicos ({technicians.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('usuarios')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors ${
+              activeTab === 'usuarios'
+                ? 'bg-blue-600 text-white shadow'
+                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <Users size={14} /> Administradores & Acessos ({systemUsers.length})
           </button>
           <button
             onClick={() => setActiveTab('sql')}
@@ -863,6 +1037,690 @@ RETURNS TABLE (
 ...
 $$ LANGUAGE plpgsql;`}
           </pre>
+        </div>
+      )}
+
+      {/* ABA 5: GESTÃO DE TÉCNICOS DE CAMPO (CRUD) */}
+      {activeTab === 'tecnicos' && (
+        <div className="space-y-4 animate-fadeIn">
+          {/* Cabeçalho da Aba e Ações */}
+          <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            <div className="flex flex-1 flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-[220px]">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar técnico por nome, e-mail ou telefone..."
+                  value={searchTech}
+                  onChange={(e) => setSearchTech(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <select
+                value={filterCreTech}
+                onChange={(e) => setFilterCreTech(e.target.value)}
+                className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="todas">Todas as Regionais (CREs)</option>
+                {regions.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              onClick={() => handleOpenTechModal()}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm"
+            >
+              <Plus size={15} /> Cadastrar Novo Técnico
+            </button>
+          </div>
+
+          {/* Cards de Resumo Operacional */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+              <div className="text-[11px] font-bold uppercase text-slate-400">Total de Técnicos</div>
+              <div className="text-xl font-black text-slate-900 mt-0.5">{technicians.length}</div>
+            </div>
+            <div className="bg-white p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/20 shadow-sm">
+              <div className="text-[11px] font-bold uppercase text-emerald-700">Disponíveis Agora</div>
+              <div className="text-xl font-black text-emerald-600 mt-0.5">
+                {technicians.filter((t) => t.status === 'disponivel').length}
+              </div>
+            </div>
+            <div className="bg-white p-3.5 rounded-xl border border-amber-200 bg-amber-50/20 shadow-sm">
+              <div className="text-[11px] font-bold uppercase text-amber-700">Ocupados em Rota</div>
+              <div className="text-xl font-black text-amber-600 mt-0.5">
+                {technicians.filter((t) => t.status === 'ocupado').length}
+              </div>
+            </div>
+            <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+              <div className="text-[11px] font-bold uppercase text-slate-500">Indisponíveis / Folga</div>
+              <div className="text-xl font-black text-slate-600 mt-0.5">
+                {technicians.filter((t) => t.status === 'indisponivel' || t.status === 'suspenso').length}
+              </div>
+            </div>
+          </div>
+
+          {/* Tabela de Técnicos */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-200">
+                    <th className="py-3 px-4">Técnico & Contato</th>
+                    <th className="py-3 px-4">CRE Base & Raio</th>
+                    <th className="py-3 px-4">Coordenadas Base</th>
+                    <th className="py-3 px-4">Carga Ativa</th>
+                    <th className="py-3 px-4">Status Operacional</th>
+                    <th className="py-3 px-4 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {technicians
+                    .filter((t) => {
+                      const matchSearch =
+                        t.name.toLowerCase().includes(searchTech.toLowerCase()) ||
+                        t.email.toLowerCase().includes(searchTech.toLowerCase()) ||
+                        t.phone.includes(searchTech);
+                      const matchCre = filterCreTech === 'todas' || t.primary_cre_id === filterCreTech;
+                      return matchSearch && matchCre;
+                    })
+                    .map((tech) => {
+                      const activeTicketsCount = tickets.filter(
+                        (t) =>
+                          t.assigned_technician_id === tech.id &&
+                          !['concluido', 'recusado'].includes(t.status)
+                      ).length;
+
+                      const cleanPhone = tech.phone.replace(/\D/g, '');
+
+                      return (
+                        <tr key={tech.id} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="py-3.5 px-4">
+                            <div className="font-bold text-slate-900 text-xs">{tech.name}</div>
+                            <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                              <Mail size={12} className="text-slate-400" />
+                              <span>{tech.email}</span>
+                            </div>
+                            <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                              <Phone size={12} className="text-slate-400" />
+                              <a
+                                href={`https://wa.me/55${cleanPhone}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-emerald-600 hover:underline font-medium"
+                              >
+                                {tech.phone} (WhatsApp)
+                              </a>
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <span className="font-semibold text-slate-800">{tech.primary_cre_name}</span>
+                            <div className="text-[10px] text-slate-400 mt-0.5">Raio: {tech.radius_km} km</div>
+                          </td>
+
+                          <td className="py-3.5 px-4 font-mono text-[11px] text-slate-500">
+                            <div className="flex items-center gap-1 text-slate-700">
+                              <MapPin size={12} className="text-blue-500" />
+                              <span>{tech.latitude.toFixed(4)}, {tech.longitude.toFixed(4)}</span>
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`font-bold px-2 py-0.5 rounded-full text-[11px] ${
+                                  activeTicketsCount >= tech.max_active_tickets
+                                    ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                    : activeTicketsCount > 0
+                                    ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                    : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                }`}
+                              >
+                                {activeTicketsCount} / {tech.max_active_tickets}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">chamados em aberto</div>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <button
+                              onClick={() => onToggleTechnicianStatus && onToggleTechnicianStatus(tech.id)}
+                              title="Clique para alternar status operacional"
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all flex items-center gap-1 ${
+                                tech.status === 'disponivel'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
+                                  : tech.status === 'ocupado'
+                                  ? 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100'
+                                  : 'bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200'
+                              }`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  tech.status === 'disponivel'
+                                    ? 'bg-emerald-500'
+                                    : tech.status === 'ocupado'
+                                    ? 'bg-amber-500'
+                                    : 'bg-slate-400'
+                                }`}
+                              />
+                              <span className="capitalize">{tech.status}</span>
+                            </button>
+                          </td>
+
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => handleOpenTechModal(tech)}
+                                className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Editar Cadastro"
+                              >
+                                <Edit size={14} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (
+                                    confirm(
+                                      `Tem certeza de que deseja remover o técnico "${tech.name}" da base HelpTech?`
+                                    )
+                                  ) {
+                                    onDeleteTechnician && onDeleteTechnician(tech.id);
+                                  }
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                title="Excluir Técnico"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ABA 6: GESTÃO DE ADMINISTRADORES & ACESSOS (CRUD) */}
+      {activeTab === 'usuarios' && (
+        <div className="space-y-4 animate-fadeIn">
+          {/* Cabeçalho e Ações */}
+          <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            <div className="flex flex-1 flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-[220px]">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar administrador por nome, e-mail ou telefone..."
+                  value={searchUser}
+                  onChange={(e) => setSearchUser(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <select
+                value={filterRoleUser}
+                onChange={(e) => setFilterRoleUser(e.target.value)}
+                className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="todas">Todos os Perfis de Acesso</option>
+                <option value="admin">Administrador Geral</option>
+                <option value="controladoria">Controladoria & Despacho</option>
+                <option value="auditor_seedf">Auditor Externo SEEDF</option>
+              </select>
+            </div>
+
+            <button
+              onClick={() => handleOpenUserModal()}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm"
+            >
+              <Plus size={15} /> Cadastrar Novo Usuário
+            </button>
+          </div>
+
+          {/* Cards de Resumo */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+              <div className="text-[11px] font-bold uppercase text-slate-400">Total de Operadores</div>
+              <div className="text-xl font-black text-slate-900 mt-0.5">{systemUsers.length}</div>
+            </div>
+            <div className="bg-white p-3.5 rounded-xl border border-purple-200 bg-purple-50/20 shadow-sm">
+              <div className="text-[11px] font-bold uppercase text-purple-700">Administradores</div>
+              <div className="text-xl font-black text-purple-600 mt-0.5">
+                {systemUsers.filter((u) => u.role === 'admin').length}
+              </div>
+            </div>
+            <div className="bg-white p-3.5 rounded-xl border border-blue-200 bg-blue-50/20 shadow-sm">
+              <div className="text-[11px] font-bold uppercase text-blue-700">Controladoria & Despacho</div>
+              <div className="text-xl font-black text-blue-600 mt-0.5">
+                {systemUsers.filter((u) => u.role === 'controladoria').length}
+              </div>
+            </div>
+            <div className="bg-white p-3.5 rounded-xl border border-amber-200 bg-amber-50/20 shadow-sm">
+              <div className="text-[11px] font-bold uppercase text-amber-700">Auditores SEEDF</div>
+              <div className="text-xl font-black text-amber-600 mt-0.5">
+                {systemUsers.filter((u) => u.role === 'auditor_seedf').length}
+              </div>
+            </div>
+          </div>
+
+          {/* Tabela de Usuários */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-200">
+                    <th className="py-3 px-4">Nome & Contato</th>
+                    <th className="py-3 px-4">E-mail Institucional</th>
+                    <th className="py-3 px-4">Perfil de Acesso & Permissões</th>
+                    <th className="py-3 px-4">Data de Cadastro</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {systemUsers
+                    .filter((u) => {
+                      const matchSearch =
+                        u.name.toLowerCase().includes(searchUser.toLowerCase()) ||
+                        u.email.toLowerCase().includes(searchUser.toLowerCase()) ||
+                        u.phone.includes(searchUser);
+                      const matchRole = filterRoleUser === 'todas' || u.role === filterRoleUser;
+                      return matchSearch && matchRole;
+                    })
+                    .map((user) => {
+                      const cleanPhone = user.phone.replace(/\D/g, '');
+
+                      const roleBadge = {
+                        admin: {
+                          label: 'Administrador Geral HelpTech',
+                          bg: 'bg-purple-50 text-purple-700 border-purple-200'
+                        },
+                        controladoria: {
+                          label: 'Controladoria & Despachante',
+                          bg: 'bg-blue-50 text-blue-700 border-blue-200'
+                        },
+                        auditor_seedf: {
+                          label: 'Auditor Externo SEEDF',
+                          bg: 'bg-amber-50 text-amber-800 border-amber-200'
+                        }
+                      }[user.role];
+
+                      return (
+                        <tr key={user.id} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="py-3.5 px-4">
+                            <div className="font-bold text-slate-900 text-xs">{user.name}</div>
+                            <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                              <Phone size={12} className="text-slate-400" />
+                              <a
+                                href={`https://wa.me/55${cleanPhone}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-emerald-600 hover:underline"
+                              >
+                                {user.phone}
+                              </a>
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-4 font-mono text-[11px] text-slate-600">
+                            <div className="flex items-center gap-1.5">
+                              <Mail size={12} className="text-slate-400" />
+                              <span>{user.email}</span>
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${roleBadge.bg}`}
+                            >
+                              {roleBadge.label}
+                            </span>
+                          </td>
+
+                          <td className="py-3.5 px-4 text-slate-500 text-[11px]">
+                            {new Date(user.created_at).toLocaleDateString('pt-BR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric'
+                            })}
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <button
+                              onClick={() => onToggleSystemUserActive && onToggleSystemUserActive(user.id)}
+                              title="Clique para ativar/desativar usuário"
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all flex items-center gap-1 ${
+                                user.active
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
+                                  : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                              }`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  user.active ? 'bg-emerald-500' : 'bg-rose-400'
+                                }`}
+                              />
+                              <span>{user.active ? 'Ativo' : 'Inativo'}</span>
+                            </button>
+                          </td>
+
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => handleOpenUserModal(user)}
+                                className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Editar Usuário"
+                              >
+                                <Edit size={14} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (
+                                    confirm(
+                                      `Tem certeza de que deseja remover o usuário "${user.name}"?`
+                                    )
+                                  ) {
+                                    onDeleteSystemUser && onDeleteSystemUser(user.id);
+                                  }
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                title="Excluir Usuário"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CADASTRO / EDIÇÃO DE TÉCNICO */}
+      {showTechModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200">
+            <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Wrench size={18} className="text-blue-400" />
+                <h3 className="font-bold text-sm">
+                  {editingTech ? 'Editar Cadastro de Técnico' : 'Cadastrar Novo Técnico de Campo'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowTechModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTech} className="p-5 space-y-3.5 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Nome Completo *</label>
+                <input
+                  type="text"
+                  required
+                  value={techForm.name}
+                  onChange={(e) => setTechForm({ ...techForm, name: e.target.value })}
+                  placeholder="Ex: Carlos Alberto Mendes"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Telefone WhatsApp *</label>
+                  <input
+                    type="text"
+                    required
+                    value={techForm.phone}
+                    onChange={(e) => setTechForm({ ...techForm, phone: e.target.value })}
+                    placeholder="(61) 98452-1101"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">E-mail Institucional *</label>
+                  <input
+                    type="email"
+                    required
+                    value={techForm.email}
+                    onChange={(e) => setTechForm({ ...techForm, email: e.target.value })}
+                    placeholder="carlos@fieldservice.df.gov.br"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">CRE Base Principal *</label>
+                  <select
+                    value={techForm.primary_cre_id}
+                    onChange={(e) => setTechForm({ ...techForm, primary_cre_id: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {regions.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Raio de Cobertura (km)</label>
+                  <input
+                    type="number"
+                    min="5"
+                    max="100"
+                    value={techForm.radius_km}
+                    onChange={(e) => setTechForm({ ...techForm, radius_km: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Latitude da Base</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={techForm.latitude}
+                    onChange={(e) => setTechForm({ ...techForm, latitude: Number(e.target.value) })}
+                    placeholder="-15.8340"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Longitude da Base</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={techForm.longitude}
+                    onChange={(e) => setTechForm({ ...techForm, longitude: Number(e.target.value) })}
+                    placeholder="-48.0560"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Status Operacional</label>
+                  <select
+                    value={techForm.status}
+                    onChange={(e) =>
+                      setTechForm({
+                        ...techForm,
+                        status: e.target.value as Technician['status']
+                      })
+                    }
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="disponivel">Disponível para Despacho</option>
+                    <option value="ocupado">Ocupado em Atendimento</option>
+                    <option value="indisponivel">Indisponível / Folga</option>
+                    <option value="suspenso">Suspenso</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Máx. Chamados Simultâneos</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={techForm.max_active_tickets}
+                    onChange={(e) =>
+                      setTechForm({ ...techForm, max_active_tickets: Number(e.target.value) })
+                    }
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowTechModal(false)}
+                  className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl font-bold transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-colors shadow-sm"
+                >
+                  {editingTech ? 'Salvar Alterações' : 'Cadastrar Técnico'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CADASTRO / EDIÇÃO DE USUÁRIO ADMINISTRADOR */}
+      {showUserModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200">
+            <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Shield size={18} className="text-blue-400" />
+                <h3 className="font-bold text-sm">
+                  {editingUser ? 'Editar Usuário do Sistema' : 'Cadastrar Novo Usuário / Administrador'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowUserModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveUser} className="p-5 space-y-3.5 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Nome Completo *</label>
+                <input
+                  type="text"
+                  required
+                  value={userForm.name}
+                  onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
+                  placeholder="Ex: Amanda Nogueira"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">E-mail Institucional *</label>
+                <input
+                  type="email"
+                  required
+                  value={userForm.email}
+                  onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                  placeholder="amanda@helptech.com.br"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Telefone WhatsApp *</label>
+                <input
+                  type="text"
+                  required
+                  value={userForm.phone}
+                  onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })}
+                  placeholder="(61) 98111-2233"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Perfil de Acesso & Permissões *</label>
+                <select
+                  value={userForm.role}
+                  onChange={(e) =>
+                    setUserForm({ ...userForm, role: e.target.value as SystemUser['role'] })
+                  }
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="admin">Administrador Geral (Acesso total)</option>
+                  <option value="controladoria">Controladoria & Despacho (Gestão de chamados e orçamentos)</option>
+                  <option value="auditor_seedf">Auditor Externo SEEDF (Prestação de contas e relatórios)</option>
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Define o nível de permissão no painel de controle e na auditoria.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="userActiveCheck"
+                  checked={userForm.active}
+                  onChange={(e) => setUserForm({ ...userForm, active: e.target.checked })}
+                  className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                />
+                <label htmlFor="userActiveCheck" className="text-slate-700 font-semibold cursor-pointer">
+                  Usuário Ativo no Sistema
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowUserModal(false)}
+                  className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl font-bold transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-colors shadow-sm"
+                >
+                  {editingUser ? 'Salvar Alterações' : 'Cadastrar Usuário'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

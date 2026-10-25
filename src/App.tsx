@@ -24,6 +24,7 @@ export const App: React.FC = () => {
   const {
     tickets,
     technicians,
+    systemUsers,
     schools,
     categories,
     regions,
@@ -39,6 +40,14 @@ export const App: React.FC = () => {
     setWaitingThirdParty,
     resumeService,
     manualDispatch,
+    createTechnician,
+    updateTechnician,
+    deleteTechnician,
+    toggleTechnicianStatus,
+    createSystemUser,
+    updateSystemUser,
+    deleteSystemUser,
+    toggleSystemUserActive,
     resetDatabase
   } = useAppStore();
 
@@ -170,12 +179,21 @@ export const App: React.FC = () => {
               <CentralAdminDashboard
                 tickets={tickets}
                 technicians={technicians}
+                systemUsers={systemUsers}
                 schools={schools}
                 regions={regions}
                 categories={categories}
                 onManualDispatch={manualDispatch}
                 onDecideQuote={decideQuote}
                 onViewOS={(ticket) => setViewingOsTicket(ticket)}
+                onCreateTechnician={createTechnician}
+                onUpdateTechnician={updateTechnician}
+                onDeleteTechnician={deleteTechnician}
+                onToggleTechnicianStatus={toggleTechnicianStatus}
+                onCreateSystemUser={createSystemUser}
+                onUpdateSystemUser={updateSystemUser}
+                onDeleteSystemUser={deleteSystemUser}
+                onToggleSystemUserActive={toggleSystemUserActive}
                 onResetDatabase={resetDatabase}
               />
             )}
