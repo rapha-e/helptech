@@ -100,6 +100,18 @@ export interface TicketDispatchLog {
   created_at: string;
 }
 
+export interface TicketNotification {
+  id: string;
+  ticket_id: string;
+  type: 'abertura' | 'despacho' | 'visita' | 'orcamento' | 'peca' | 'terceiro' | 'conclusao';
+  recipient_role: 'escola' | 'tecnico' | 'central';
+  recipient_phone_or_email: string;
+  channel: 'whatsapp' | 'push' | 'email';
+  title: string;
+  message: string;
+  sent_at: string;
+}
+
 export interface Ticket {
   id: string;
   protocol: string;
@@ -120,16 +132,22 @@ export interface Ticket {
   status:
     | 'aberto'
     | 'despachado'
+    | 'visita_agendada'
     | 'em_deslocamento'
     | 'em_atendimento'
     | 'aguardando_orcamento'
     | 'aguardando_peca'
+    | 'aguardando_terceiro'
     | 'concluido'
     | 'cancelado';
   assigned_technician_id?: string;
   assigned_technician_name?: string;
   dispatch_attempts: number;
   dispatch_timeout_at?: string;
+  scheduled_visit_at?: string;
+  scheduled_visit_notes?: string;
+  pending_part_notes?: string;
+  third_party_notes?: string;
   arrival_lat?: number;
   arrival_lng?: number;
   arrived_at?: string;
@@ -140,6 +158,7 @@ export interface Ticket {
   completion?: TicketCompletion;
   attachments: TicketAttachment[];
   dispatch_logs: TicketDispatchLog[];
+  notifications?: TicketNotification[];
 }
 
 export const REGIONAL_COORDINATIONS: RegionalCoordination[] = [

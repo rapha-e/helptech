@@ -89,18 +89,18 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
     },
     {
       id: 'em_atendimento',
-      title: 'Em Deslocamento / Campo',
+      title: 'Agendado / Em Rota / Campo',
       bgHeader: 'bg-blue-100 text-blue-900 border-blue-300',
       items: filteredTickets.filter((t) =>
-        ['em_deslocamento', 'em_atendimento'].includes(t.status)
+        ['visita_agendada', 'em_deslocamento', 'em_atendimento'].includes(t.status)
       )
     },
     {
       id: 'aguardando_orcamento',
-      title: 'Orçamento & Peças',
+      title: 'Orçamento, Peças & Terceiros',
       bgHeader: 'bg-purple-100 text-purple-900 border-purple-300',
       items: filteredTickets.filter((t) =>
-        ['aguardando_orcamento', 'aguardando_peca'].includes(t.status)
+        ['aguardando_orcamento', 'aguardando_peca', 'aguardando_terceiro'].includes(t.status)
       )
     },
     {
@@ -149,7 +149,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
             <Building2 size={16} className="text-blue-600" />
           </div>
           <div className="text-2xl font-black text-slate-900">{totalTickets}</div>
-          <div className="text-[10px] text-slate-400 mt-1">15 Regionais DF</div>
+          <div className="text-[10px] text-slate-400 mt-1">14 Regionais DF</div>
         </div>
 
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">

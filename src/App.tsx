@@ -34,6 +34,10 @@ export const App: React.FC = () => {
     submitQuote,
     decideQuote,
     completeTicket,
+    scheduleVisit,
+    setWaitingParts,
+    setWaitingThirdParty,
+    resumeService,
     manualDispatch,
     resetDatabase
   } = useAppStore();
@@ -156,6 +160,10 @@ export const App: React.FC = () => {
                 onCheckIn={checkInTechnician}
                 onSubmitQuote={submitQuote}
                 onCompleteTicket={completeTicket}
+                onScheduleVisit={scheduleVisit}
+                onSetWaitingParts={setWaitingParts}
+                onSetWaitingThirdParty={setWaitingThirdParty}
+                onResumeService={resumeService}
                 onViewOS={(ticket) => setViewingOsTicket(ticket)}
               />
             ) : (

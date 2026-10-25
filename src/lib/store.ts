@@ -215,6 +215,35 @@ export function useAppStore() {
         ]
       : [];
 
+    const initialNotifications = [
+      {
+        id: `notif-user-${ticketId}`,
+        ticket_id: ticketId,
+        type: 'abertura' as const,
+        recipient_role: 'escola' as const,
+        recipient_phone_or_email: data.requester_phone,
+        channel: 'whatsapp' as const,
+        title: 'Confirmação de Abertura de Chamado',
+        message: `Olá ${data.requester_name}! Seu chamado HelpTech ${protocol} foi registrado com sucesso para ${school?.name || 'sua escola'}. Categoria: ${category?.name}. Você pode acompanhar em tempo real pelo portal.`,
+        sent_at: new Date().toISOString()
+      },
+      ...(candidate
+        ? [
+            {
+              id: `notif-tech-${ticketId}`,
+              ticket_id: ticketId,
+              type: 'despacho' as const,
+              recipient_role: 'tecnico' as const,
+              recipient_phone_or_email: candidate.technician.phone,
+              channel: 'push' as const,
+              title: 'Chamado Atribuído por Proximidade',
+              message: `Novo chamado ${protocol} em ${school?.name} (${candidate.distanceKm.toFixed(1)} km de distância). Prazo de aceite: 20 min.`,
+              sent_at: new Date().toISOString()
+            }
+          ]
+        : [])
+    ];
+
     const newTicket: Ticket = {
       id: ticketId,
       protocol,
@@ -242,7 +271,8 @@ export function useAppStore() {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       attachments: initialAttachments,
-      dispatch_logs: initialLogs
+      dispatch_logs: initialLogs,
+      notifications: initialNotifications
     };
 
     setTickets((prev) => [newTicket, ...prev]);
@@ -525,7 +555,131 @@ export function useAppStore() {
   };
 
   /**
-   * 8. Central de Controle: Despacho manual direto
+   * 8. PWA Técnico: Agendar visita presencial com o gestor
+   */
+  const scheduleVisit = (ticketId: string, scheduledAt: string, notes: string) => {
+    setTickets((prev) =>
+      prev.map((t) => {
+        if (t.id === ticketId) {
+          const notif = {
+            id: `notif-visit-${Date.now()}`,
+            ticket_id: t.id,
+            type: 'visita' as const,
+            recipient_role: 'escola' as const,
+            recipient_phone_or_email: t.requester_phone,
+            channel: 'whatsapp' as const,
+            title: 'Visita Técnica Agendada',
+            message: `Olá ${t.requester_name}! O técnico HelpTech agendou a visita técnica para ${new Date(scheduledAt).toLocaleString('pt-BR')}. Obs: ${notes || 'Sem observações adicionais.'}`,
+            sent_at: new Date().toISOString()
+          };
+          return {
+            ...t,
+            status: 'visita_agendada' as const,
+            scheduled_visit_at: scheduledAt,
+            scheduled_visit_notes: notes,
+            updated_at: new Date().toISOString(),
+            notifications: [...(t.notifications || []), notif],
+            dispatch_logs: [
+              ...t.dispatch_logs,
+              {
+                id: `log-visit-${Date.now()}`,
+                ticket_id: t.id,
+                technician_id: t.assigned_technician_id || 'unknown',
+                technician_name: t.assigned_technician_name || 'Técnico',
+                status: 'notificado' as const,
+                refusal_reason: `Visita agendada para ${new Date(scheduledAt).toLocaleString('pt-BR')}`,
+                created_at: new Date().toISOString()
+              }
+            ]
+          };
+        }
+        return t;
+      })
+    );
+  };
+
+  /**
+   * 9. PWA Técnico: Sinalizar Aguardando Peça com notificação
+   */
+  const setWaitingParts = (ticketId: string, partNotes: string) => {
+    setTickets((prev) =>
+      prev.map((t) => {
+        if (t.id === ticketId) {
+          const notif = {
+            id: `notif-part-${Date.now()}`,
+            ticket_id: t.id,
+            type: 'peca' as const,
+            recipient_role: 'escola' as const,
+            recipient_phone_or_email: t.requester_phone,
+            channel: 'whatsapp' as const,
+            title: 'Chamado em Espera de Peça de Reposição',
+            message: `Chamado ${t.protocol}: o atendimento foi pausado aguardando envio do componente: ${partNotes}. A Central HelpTech já acionou o estoque.`,
+            sent_at: new Date().toISOString()
+          };
+          return {
+            ...t,
+            status: 'aguardando_peca' as const,
+            pending_part_notes: partNotes,
+            updated_at: new Date().toISOString(),
+            notifications: [...(t.notifications || []), notif]
+          };
+        }
+        return t;
+      })
+    );
+  };
+
+  /**
+   * 10. PWA Técnico / Central: Sinalizar Aguardando Serviço de Terceiros (ex: Operadora, Neoenergia)
+   */
+  const setWaitingThirdParty = (ticketId: string, thirdPartyNotes: string) => {
+    setTickets((prev) =>
+      prev.map((t) => {
+        if (t.id === ticketId) {
+          const notif = {
+            id: `notif-third-${Date.now()}`,
+            ticket_id: t.id,
+            type: 'terceiro' as const,
+            recipient_role: 'escola' as const,
+            recipient_phone_or_email: t.requester_phone,
+            channel: 'whatsapp' as const,
+            title: 'Aguardando Atuação de Terceiros',
+            message: `Chamado ${t.protocol}: identificada dependência de concessionária/terceiro: ${thirdPartyNotes}. Acompanhamento aberto com o provedor.`,
+            sent_at: new Date().toISOString()
+          };
+          return {
+            ...t,
+            status: 'aguardando_terceiro' as const,
+            third_party_notes: thirdPartyNotes,
+            updated_at: new Date().toISOString(),
+            notifications: [...(t.notifications || []), notif]
+          };
+        }
+        return t;
+      })
+    );
+  };
+
+  /**
+   * 11. Retomar atendimento
+   */
+  const resumeService = (ticketId: string) => {
+    setTickets((prev) =>
+      prev.map((t) => {
+        if (t.id === ticketId) {
+          return {
+            ...t,
+            status: 'em_atendimento' as const,
+            updated_at: new Date().toISOString()
+          };
+        }
+        return t;
+      })
+    );
+  };
+
+  /**
+   * 12. Central de Controle: Despacho manual direto
    */
   const manualDispatch = (ticketId: string, technicianId: string) => {
     const tech = technicians.find((t) => t.id === technicianId);
@@ -534,14 +688,26 @@ export function useAppStore() {
     setTickets((prev) =>
       prev.map((t) => {
         if (t.id === ticketId) {
+          const notif = {
+            id: `notif-dispatch-${Date.now()}`,
+            ticket_id: t.id,
+            type: 'despacho' as const,
+            recipient_role: 'tecnico' as const,
+            recipient_phone_or_email: tech.phone,
+            channel: 'push' as const,
+            title: 'Novo Chamado Despachado para Você',
+            message: `Novo chamado ${t.protocol} da escola ${t.school_name} foi atribuído a você. Aceite em até 20 minutos no PWA.`,
+            sent_at: new Date().toISOString()
+          };
           return {
             ...t,
-            status: 'despachado',
+            status: 'despachado' as const,
             assigned_technician_id: tech.id,
             assigned_technician_name: tech.name,
             dispatch_attempts: t.dispatch_attempts + 1,
             dispatch_timeout_at: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
             updated_at: new Date().toISOString(),
+            notifications: [...(t.notifications || []), notif],
             dispatch_logs: [
               ...t.dispatch_logs,
               {
@@ -549,7 +715,7 @@ export function useAppStore() {
                 ticket_id: t.id,
                 technician_id: tech.id,
                 technician_name: tech.name,
-                status: 'notificado',
+                status: 'notificado' as const,
                 created_at: new Date().toISOString()
               }
             ]
@@ -583,6 +749,10 @@ export function useAppStore() {
     submitQuote,
     decideQuote,
     completeTicket,
+    scheduleVisit,
+    setWaitingParts,
+    setWaitingThirdParty,
+    resumeService,
     manualDispatch,
     resetDatabase
   };

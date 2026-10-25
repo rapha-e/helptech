@@ -1043,6 +1043,75 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                 </button>
               </div>
 
+              {/* AVISO: VISITA TÉCNICA AGENDADA */}
+              {selectedTrackedTicket.status === 'visita_agendada' && (
+                <div className="p-3.5 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900 space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-purple-800">
+                    <span className="w-2 h-2 rounded-full bg-purple-600"></span>
+                    Visita Técnica Agendada com o Solicitante
+                  </div>
+                  <p className="text-[11.5px] text-purple-700">
+                    Previsão de Atendimento: <strong>{selectedTrackedTicket.scheduled_visit_at ? new Date(selectedTrackedTicket.scheduled_visit_at).toLocaleString('pt-BR') : 'Data a confirmar'}</strong>
+                  </p>
+                  {selectedTrackedTicket.scheduled_visit_notes && (
+                    <p className="text-[11px] text-purple-600">
+                      Observação técnica: {selectedTrackedTicket.scheduled_visit_notes}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* AVISO: AGUARDANDO PEÇA */}
+              {selectedTrackedTicket.status === 'aguardando_peca' && (
+                <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-blue-800">
+                    <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                    Aguardando Envio de Peça pela Logística HelpTech
+                  </div>
+                  <p className="text-[11.5px] text-blue-700">
+                    Componente em solicitação: <strong>{selectedTrackedTicket.pending_part_notes || 'Componente em processo de despacho pelo almoxarifado central.'}</strong>
+                  </p>
+                  <span className="text-[10.5px] text-slate-500 block">
+                    O relógio de SLA está congelado formalmente até a chegada da peça na unidade escolar.
+                  </span>
+                </div>
+              )}
+
+              {/* AVISO: AGUARDANDO TERCEIRO */}
+              {selectedTrackedTicket.status === 'aguardando_terceiro' && (
+                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-amber-800">
+                    <span className="w-2 h-2 rounded-full bg-amber-600"></span>
+                    Aguardando Atuação de Concessionária Externa
+                  </div>
+                  <p className="text-[11.5px] text-amber-700">
+                    Dependência externa: <strong>{selectedTrackedTicket.third_party_notes || 'Provedor de fibra ótica ou concessionária de energia.'}</strong>
+                  </p>
+                </div>
+              )}
+
+              {/* HISTÓRICO DE NOTIFICAÇÕES ENVIADAS PARA O USUÁRIO */}
+              {selectedTrackedTicket.notifications && selectedTrackedTicket.notifications.length > 0 && (
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block">
+                    Notificações Automáticas Transmitidas ({selectedTrackedTicket.notifications.length}):
+                  </span>
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                    {selectedTrackedTicket.notifications.map((n) => (
+                      <div key={n.id} className="text-[11px] p-2 bg-white rounded-lg border border-slate-200 flex items-start justify-between gap-2">
+                        <div>
+                          <strong className="text-slate-800 block">{n.title}</strong>
+                          <span className="text-slate-600">{n.message}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                          {new Date(n.sent_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Card de Orçamento se houver */}
               {selectedTrackedTicket.quote && (
                 <div className="bg-amber-50/70 border-2 border-amber-300 rounded-2xl p-4 space-y-3">
