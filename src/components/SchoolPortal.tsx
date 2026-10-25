@@ -42,6 +42,17 @@ interface SchoolPortalProps {
 }
 
 const DRAFT_KEY = 'helptechinfo_school_draft';
+const MY_TICKETS_KEY = 'helptech_my_ticket_ids';
+const MY_PHONE_KEY = 'helptech_my_phone';
+
+export const applyPhoneMask = (val: string): string => {
+  const digits = val.replace(/\D/g, '').slice(0, 11);
+  if (!digits) return '';
+  if (digits.length <= 2) return `(${digits}`;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+};
 
 export const SchoolPortal: React.FC<SchoolPortalProps> = ({
   schools,
@@ -84,8 +95,21 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [createdSuccessTicket, setCreatedSuccessTicket] = useState<Ticket | null>(null);
 
-  // Rastreamento
-  const [searchQuery, setSearchQuery] = useState('');
+  // Rastreamento restrito aos chamados do usuário
+  const [myTicketIds, setMyTicketIds] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(MY_TICKETS_KEY) || '[]');
+    } catch {
+      return [];
+    }
+  });
+  const [searchPhoneOrProtocol, setSearchPhoneOrProtocol] = useState<string>(() => {
+    try {
+      return localStorage.getItem(MY_PHONE_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
   const [selectedTrackedTicket, setSelectedTrackedTicket] = useState<Ticket | null>(null);
 
   // Atualiza escola padrão quando a CRE muda
@@ -209,6 +233,17 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
     setCreatedSuccessTicket(created);
     localStorage.removeItem(DRAFT_KEY);
 
+    // Registra o chamado na lista exclusiva do usuário
+    try {
+      const updated = Array.from(new Set([created.id, ...myTicketIds]));
+      setMyTicketIds(updated);
+      localStorage.setItem(MY_TICKETS_KEY, JSON.stringify(updated));
+      localStorage.setItem(MY_PHONE_KEY, formData.requester_phone);
+      setSearchPhoneOrProtocol(formData.requester_phone);
+    } catch (e) {
+      console.warn('Erro ao salvar chamado do usuário');
+    }
+
     confetti({
       particleCount: 80,
       spread: 70,
@@ -216,16 +251,40 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
     });
   };
 
-  // Buscar chamado por protocolo ou token
+  // Lista de chamados restritos exclusivamente a este usuário
+  const cleanSearchDigits = searchPhoneOrProtocol.replace(/\D/g, '');
+  const userMyTickets = tickets.filter((t) => {
+    if (myTicketIds.includes(t.id)) return true;
+    if (searchPhoneOrProtocol.trim().length >= 3) {
+      const matchProtocol = t.protocol.toLowerCase().includes(searchPhoneOrProtocol.trim().toLowerCase());
+      const matchToken = t.tracking_token.toLowerCase() === searchPhoneOrProtocol.trim().toLowerCase();
+      const matchPhone = cleanSearchDigits.length >= 8 && t.requester_phone.replace(/\D/g, '').includes(cleanSearchDigits);
+      return matchProtocol || matchToken || matchPhone;
+    }
+    return false;
+  });
+
+  // Localizar chamado digitado no campo de busca
   const handleSearchTicket = () => {
-    if (!searchQuery.trim()) return;
+    if (!searchPhoneOrProtocol.trim()) return;
+    const cleanDigits = searchPhoneOrProtocol.replace(/\D/g, '');
     const found = tickets.find(
       (t) =>
-        t.protocol.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
-        t.tracking_token.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
-        t.equipment_patrimony?.toLowerCase().includes(searchQuery.trim().toLowerCase())
+        t.protocol.toLowerCase().includes(searchPhoneOrProtocol.trim().toLowerCase()) ||
+        t.tracking_token.toLowerCase().includes(searchPhoneOrProtocol.trim().toLowerCase()) ||
+        (cleanDigits.length >= 8 && t.requester_phone.replace(/\D/g, '').includes(cleanDigits))
     );
-    setSelectedTrackedTicket(found || null);
+    if (found) {
+      setSelectedTrackedTicket(found);
+      // Se encontrou pelo WhatsApp/protocolo dele, adiciona na lista para visualização contínua
+      if (!myTicketIds.includes(found.id)) {
+        const updated = [found.id, ...myTicketIds];
+        setMyTicketIds(updated);
+        try {
+          localStorage.setItem(MY_TICKETS_KEY, JSON.stringify(updated));
+        } catch (e) {}
+      }
+    }
   };
 
   return (
@@ -264,7 +323,7 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                   : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
               }`}
             >
-              <Search size={14} /> Consultar & Orçamentos
+              <Search size={14} /> Acompanhar Meus Chamados ({userMyTickets.length})
             </button>
           </div>
         </div>
@@ -597,10 +656,11 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                           type="text"
                           value={formData.requester_phone}
                           onChange={(e) =>
-                            setFormData({ ...formData, requester_phone: e.target.value })
+                            setFormData({ ...formData, requester_phone: applyPhoneMask(e.target.value) })
                           }
                           placeholder="(61) 98765-4321"
-                          className="w-full p-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                          maxLength={15}
+                          className="w-full p-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-800"
                         />
                         {formErrors.requester_phone && (
                           <p className="text-[11px] text-rose-500 mt-1">
@@ -830,50 +890,123 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
         </>
       )}
 
-      {/* ABA 2: RASTREAMENTO & APROVAÇÃO DE ORÇAMENTO */}
+      {/* ABA 2: RASTREAMENTO & ACOMPANHAMENTO EXCLUSIVO DOS CHAMADOS DO USUÁRIO */}
       {activeTab === 'rastrear' && (
-        <div className="space-y-4">
-          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-            <h3 className="text-sm font-bold text-slate-800 mb-2">
-              Consultar Chamado por Protocolo, Token ou Patrimônio
-            </h3>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearchTicket()}
-                placeholder="Ex: OS-2026-08412 ou tk_9f82... ou patrimônio"
-                className="flex-1 p-2.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-              />
-              <button
-                onClick={handleSearchTicket}
-                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5"
-              >
-                <Search size={14} /> Localizar
-              </button>
+        <div className="space-y-4 animate-fadeIn">
+          {/* Caixa de Consulta e Sigilo */}
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 text-slate-800">
+                <ShieldCheck size={20} className="text-emerald-600 shrink-0" />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Acompanhamento Exclusivo do Solicitante
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Por sigilo e segurança, você visualiza apenas os chamados gerados por você ou vinculados ao seu WhatsApp/Protocolo.
+                  </p>
+                </div>
+              </div>
+              <span className="self-start sm:self-auto px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-bold rounded-lg flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                {userMyTickets.length} chamado(s) localizado(s)
+              </span>
             </div>
 
-            <div className="mt-3 pt-3 border-t border-slate-100">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-2">
-                Atendimentos Recentes Registrados no Sistema:
-              </span>
-              <div className="flex flex-wrap gap-2">
-                {tickets.slice(0, 5).map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => {
-                      setSelectedTrackedTicket(t);
-                      setSearchQuery(t.protocol);
-                    }}
-                    className="text-xs px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 border border-slate-200 transition-colors flex items-center gap-1 font-mono"
-                  >
-                    <span>{t.protocol}</span>
-                    <span className="text-[10px] text-slate-400">({t.cre_name})</span>
-                  </button>
-                ))}
+            {/* Campo para localizar chamados pelo WhatsApp ou Protocolo */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Consultar por Telefone WhatsApp ou Número do Protocolo
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <Search size={15} className="absolute left-3 top-3 text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchPhoneOrProtocol}
+                    onChange={(e) => setSearchPhoneOrProtocol(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearchTicket()}
+                    placeholder="Digite seu WhatsApp (ex: 61 98765-4321) ou Protocolo (ex: OS-2026-...)"
+                    className="w-full pl-9 pr-3 py-2.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-800"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSearchTicket}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <Search size={14} /> Buscar Meus Chamados
+                </button>
               </div>
             </div>
+
+            {/* Lista dos Chamados do Usuário */}
+            {userMyTickets.length > 0 ? (
+              <div className="pt-2">
+                <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-2">
+                  Seus Chamados Cadastrados ({userMyTickets.length}):
+                </span>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {userMyTickets.map((t) => {
+                    const isSelected = selectedTrackedTicket?.id === t.id;
+                    return (
+                      <div
+                        key={t.id}
+                        onClick={() => setSelectedTrackedTicket(t)}
+                        className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-blue-50/80 border-blue-500 shadow-sm ring-1 ring-blue-500'
+                            : 'bg-slate-50/70 hover:bg-white border-slate-200 hover:border-blue-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="font-mono text-xs font-bold text-blue-700">
+                            {t.protocol}
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                              t.status === 'concluido'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : t.status === 'aguardando_orcamento'
+                                ? 'bg-amber-100 text-amber-800'
+                                : t.status === 'em_atendimento' || t.status === 'em_deslocamento'
+                                ? 'bg-indigo-100 text-indigo-800'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}
+                          >
+                            {t.status.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <h4 className="text-xs font-bold text-slate-800 line-clamp-1 mb-1">
+                          {t.title}
+                        </h4>
+                        <p className="text-[11px] text-slate-500 line-clamp-1 mb-2">
+                          {t.school_name} • CRE {t.cre_name}
+                        </p>
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 text-[10.5px] text-slate-500">
+                          <span>
+                            {new Date(t.created_at).toLocaleDateString('pt-BR')} às{' '}
+                            {new Date(t.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          <span className="text-blue-600 font-semibold hover:underline">
+                            {isSelected ? 'Em exibição' : 'Ver detalhes →'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-center text-xs text-slate-500 space-y-1">
+                <p className="font-semibold text-slate-700">
+                  Nenhum chamado aberto recentemente neste navegador.
+                </p>
+                <p className="text-[11px]">
+                  Caso você já tenha aberto um chamado em outro dispositivo ou anteriormente, informe seu <strong>WhatsApp com DDD</strong> ou o <strong>Protocolo</strong> no campo de busca acima para carregar seus registros com total privacidade.
+                </p>
+              </div>
+            )}
           </div>
 
           {selectedTrackedTicket && (
