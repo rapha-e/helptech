@@ -221,7 +221,35 @@ export async function createRemoteTicket(
   }
 
   try {
-    // 1. Inserção na tabela principal de tickets
+    // 1. Tenta invocar a RPC transacional create_ticket no PostgreSQL (Servidor como Fonte de Verdade)
+    const { data: rpcData, error: rpcError } = await supabase.rpc('create_ticket', {
+      p_school_id: ticket.school_id,
+      p_category_id: ticket.category_id,
+      p_requester_name: ticket.requester_name,
+      p_requester_role: ticket.requester_role,
+      p_requester_phone: ticket.requester_phone,
+      p_title: ticket.title,
+      p_description: ticket.description,
+      p_urgency_level: ticket.urgency_level,
+      p_equipment_patrimony: ticket.equipment_patrimony || null
+    });
+
+    if (!rpcError && rpcData?.success) {
+      return {
+        data: {
+          ...ticket,
+          id: rpcData.ticket_id,
+          protocol: rpcData.protocol,
+          tracking_token: rpcData.tracking_token,
+          status: rpcData.status,
+          assigned_technician_id: rpcData.assigned_technician_id
+        },
+        error: null,
+        fromFallback: false
+      };
+    }
+
+    // Fallback gracioso: Inserção direta na tabela de tickets se a RPC ainda não estiver criada
     const ticketPayload = {
       protocol: ticket.protocol,
       tracking_token: ticket.tracking_token,
@@ -421,3 +449,58 @@ export async function recordAuditEvent(event: {
     console.warn('Falha ao registrar auditoria remota:', err);
   }
 }
+
+/**
+ * Executa aceite de despacho via RPC transacional no PostgreSQL
+ */
+export async function acceptDispatchRemote(ticketId: string, scheduledDate?: string) {
+  if (!isSupabaseConfigured || !supabase) return null;
+  return await supabase.rpc('accept_dispatch', {
+    p_ticket_id: ticketId,
+    p_scheduled_visit_date: scheduledDate || null
+  });
+}
+
+/**
+ * Executa recusa de despacho com re-despacho automático via RPC no PostgreSQL
+ */
+export async function refuseDispatchRemote(ticketId: string, reason: string) {
+  if (!isSupabaseConfigured || !supabase) return null;
+  return await supabase.rpc('refuse_dispatch', {
+    p_ticket_id: ticketId,
+    p_reason: reason
+  });
+}
+
+/**
+ * Executa check-in presencial na escola via RPC no PostgreSQL
+ */
+export async function checkInRemote(ticketId: string, lat?: number, lng?: number) {
+  if (!isSupabaseConfigured || !supabase) return null;
+  return await supabase.rpc('check_in', {
+    p_ticket_id: ticketId,
+    p_latitude: lat || null,
+    p_longitude: lng || null
+  });
+}
+
+/**
+ * Executa conclusão da OS com laudo e assinatura digital via RPC no PostgreSQL
+ */
+export async function completeTicketRemote(
+  ticketId: string,
+  report: string,
+  notes: string,
+  doc: string,
+  signature: string
+) {
+  if (!isSupabaseConfigured || !supabase) return null;
+  return await supabase.rpc('complete_ticket', {
+    p_ticket_id: ticketId,
+    p_technical_report: report,
+    p_closure_notes: notes,
+    p_school_representative_doc: doc,
+    p_school_signature_svg: signature
+  });
+}
+
