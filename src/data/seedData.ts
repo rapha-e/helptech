@@ -286,6 +286,15 @@ export const TECHNICIANS: Technician[] = [
 
 export const INITIAL_SYSTEM_USERS: SystemUser[] = [
   {
+    id: 'user-suporte-admin',
+    name: 'Suporte Central DTI',
+    email: 'suporte@helptech.com.br',
+    phone: '(61) 3300-2203',
+    role: 'admin',
+    active: true,
+    created_at: '2026-03-01T08:00:00Z'
+  },
+  {
     id: 'user-admin-1',
     name: 'Raphael Gestão HelpTech',
     email: 'raphael.gestao@helptech.com.br',

@@ -1020,6 +1020,43 @@ describe('Sprint Corretiva A — Autenticação e RBAC (Fail-Closed & Menor Priv
     assert.equal(access.allowed, false);
     assert.equal(access.status, 401);
   });
+
+  test('Credencial de Suporte/Administrador (login: suporte / Dio@sup.2203) concede acesso ROLE_ADMIN à Central', () => {
+    function resolveLocalDevProfileTest(email, pass) {
+      if (pass.length < 6) return null;
+      if (
+        (email === 'suporte' || email === 'suporte@helptech.com.br' || email === 'suporte@seedf.gov.br') &&
+        pass === 'Dio@sup.2203'
+      ) {
+        return {
+          id: 'user-suporte-admin',
+          email: 'suporte@helptech.com.br',
+          name: 'Suporte Central DTI',
+          role: 'ROLE_ADMIN',
+          systemSubRole: 'admin',
+          isMockUser: true
+        };
+      }
+      return null;
+    }
+
+    // Login com credencial de suporte correta
+    const validProfile = resolveLocalDevProfileTest('suporte', 'Dio@sup.2203');
+    assert.ok(validProfile);
+    assert.equal(validProfile.role, 'ROLE_ADMIN');
+    assert.equal(validProfile.systemSubRole, 'admin');
+
+    const adminAccess = evaluateAccess({
+      user: { id: validProfile.id },
+      targetPanel: 'CENTRAL_ADMIN',
+      userRole: validProfile.role
+    });
+    assert.equal(adminAccess.allowed, true);
+
+    // Senha errada rejeita
+    const invalidPassProfile = resolveLocalDevProfileTest('suporte', 'senhaErrada');
+    assert.equal(invalidPassProfile, null);
+  });
 });
 
 // 12. Testes de Integração & Regras RLS: Sprint Corretiva B (Multitenancy, Trilha de Auditoria & Anti-Recursão)

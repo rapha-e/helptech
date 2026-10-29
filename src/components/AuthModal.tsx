@@ -118,10 +118,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <div className="relative">
               <Mail size={14} className="absolute left-3 top-3 text-slate-400" />
               <input
-                type="email"
+                type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="nome@edu.se.df.gov.br ou helptech"
+                placeholder="suporte ou seu-email@helptech.com.br"
                 required
                 className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
               />
@@ -186,12 +186,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => fillPresetEmail('admin@helptech.seedf.gov.br')}
+              onClick={() => {
+                setEmail('suporte');
+                setPassword('Dio@sup.2203');
+                setErrorMessage('');
+              }}
               className="p-2 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-slate-700 flex flex-col items-center gap-1 font-semibold transition-all text-center"
-              title="Preencher e-mail da Controladoria"
+              title="Preencher login Suporte Central"
             >
               <ShieldCheck size={16} className="text-indigo-600" />
-              <span>Central</span>
+              <span>Suporte Central</span>
             </button>
           </div>
         </div>

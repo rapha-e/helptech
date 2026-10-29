@@ -114,6 +114,10 @@ export async function signIn(
   error?: string;
 }> {
   const cleanEmail = email.trim().toLowerCase();
+  const normalizedEmail =
+    cleanEmail === 'suporte' || cleanEmail === 'suporte@helptech.com.br'
+      ? 'suporte@helptech.com.br'
+      : cleanEmail;
 
   if (!isSupabaseConfigured) {
     // Modo local / demonstração explícita quando não há chaves configuradas
@@ -130,7 +134,7 @@ export async function signIn(
 
   try {
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: cleanEmail,
+      email: normalizedEmail,
       password
     });
 
@@ -215,6 +219,21 @@ export function clearStoredSession(): void {
  */
 function resolveLocalDevProfile(email: string, pass: string): AuthUserProfile | null {
   if (pass.length < 6) return null;
+
+  // Credencial de Suporte / Administrador Central
+  if (
+    (email === 'suporte' || email === 'suporte@helptech.com.br' || email === 'suporte@seedf.gov.br') &&
+    pass === 'Dio@sup.2203'
+  ) {
+    return {
+      id: 'user-suporte-admin',
+      email: 'suporte@helptech.com.br',
+      name: 'Suporte Central DTI',
+      role: 'ROLE_ADMIN',
+      systemSubRole: 'admin',
+      isMockUser: true
+    };
+  }
 
   if (email === 'admin@helptech.seedf.gov.br' || email === 'controladoria@seedf.gov.br') {
     return {
