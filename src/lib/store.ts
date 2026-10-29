@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type {
   Ticket,
   Technician,
   School,
   TicketCategory,
-  SystemUser
+  SystemUser,
+  RegionalCoordination
 } from '../data/seedData';
 import {
   INITIAL_TICKETS,
@@ -21,6 +22,20 @@ import {
   calculateDistanceKm
 } from './geoEngine';
 import type { TicketSubmissionData, QuoteSubmissionData, TicketCompletionData } from './schemas';
+import { isSupabaseConfigured } from './supabaseClient';
+import {
+  fetchRemoteTickets,
+  createRemoteTicket,
+  updateRemoteTicketStatus
+} from './ticketService';
+import {
+  fetchRemoteSchools,
+  fetchRemoteTechnicians,
+  fetchRemoteSystemUsers,
+  fetchRemoteCategories,
+  fetchRemoteRegions
+} from './masterDataService';
+import { validateStateTransition } from './stateMachine';
 
 const TICKETS_STORAGE_KEY = 'helptechinfo_tickets_v2';
 const TECHNICIANS_STORAGE_KEY = 'helptechinfo_techs_v2';
@@ -30,7 +45,15 @@ export function getStoredTickets(): Ticket[] {
   try {
     const raw = localStorage.getItem(TICKETS_STORAGE_KEY);
     if (raw) {
-      return JSON.parse(raw);
+      const parsed: Ticket[] = JSON.parse(raw);
+      // Remove automaticamente os chamados demo (tkt-001, tkt-002, tkt-003)
+      const nonDemo = parsed.filter(
+        (t) => !['tkt-001', 'tkt-002', 'tkt-003'].includes(t.id) && !t.protocol?.includes('OS-2026-08412')
+      );
+      if (nonDemo.length !== parsed.length) {
+        localStorage.setItem(TICKETS_STORAGE_KEY, JSON.stringify(nonDemo));
+      }
+      return nonDemo;
     }
   } catch (err) {
     console.error('Falha ao ler chamados do storage:', err);
@@ -86,15 +109,72 @@ export function saveStoredSystemUsers(users: SystemUser[]) {
   }
 }
 
-// Hook principal de gerenciamento do ecossistema de dados
+// Hook principal de gerenciamento do ecossistema de dados com persistência Supabase
 export function useAppStore() {
   const [tickets, setTickets] = useState<Ticket[]>(getStoredTickets);
   const [technicians, setTechnicians] = useState<Technician[]>(getStoredTechnicians);
   const [systemUsers, setSystemUsers] = useState<SystemUser[]>(getStoredSystemUsers);
-  const [schools] = useState<School[]>(SCHOOLS);
-  const [categories] = useState<TicketCategory[]>(TICKET_CATEGORIES);
-  const [regions] = useState(REGIONAL_COORDINATIONS);
+  const [schools, setSchools] = useState<School[]>(SCHOOLS);
+  const [categories, setCategories] = useState<TicketCategory[]>(TICKET_CATEGORIES);
+  const [regions, setRegions] = useState<RegionalCoordination[]>(REGIONAL_COORDINATIONS);
 
+  const [remoteStatus, setRemoteStatus] = useState<'conectado' | 'offline_fallback'>(
+    isSupabaseConfigured ? 'conectado' : 'offline_fallback'
+  );
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  // Sincronização inicial com o Supabase
+  const refreshData = useCallback(async () => {
+    if (!isSupabaseConfigured) return;
+
+    setIsSyncing(true);
+    try {
+      const [remoteTkts, remoteSchs, remoteTechs, remoteUsers, remoteCats, remoteRegs] =
+        await Promise.all([
+          fetchRemoteTickets(),
+          fetchRemoteSchools(),
+          fetchRemoteTechnicians(),
+          fetchRemoteSystemUsers(),
+          fetchRemoteCategories(),
+          fetchRemoteRegions()
+        ]);
+
+      if (remoteTkts.data && remoteTkts.data.length > 0) {
+        setTickets(remoteTkts.data);
+        saveStoredTickets(remoteTkts.data);
+      }
+      if (remoteSchs.data && !remoteSchs.fromFallback) {
+        setSchools(remoteSchs.data);
+      }
+      if (remoteTechs.data && !remoteTechs.fromFallback) {
+        setTechnicians(remoteTechs.data);
+        saveStoredTechnicians(remoteTechs.data);
+      }
+      if (remoteUsers.data && !remoteUsers.fromFallback) {
+        setSystemUsers(remoteUsers.data);
+        saveStoredSystemUsers(remoteUsers.data);
+      }
+      if (remoteCats.data && !remoteCats.fromFallback) {
+        setCategories(remoteCats.data);
+      }
+      if (remoteRegs.data && !remoteRegs.fromFallback) {
+        setRegions(remoteRegs.data);
+      }
+
+      setRemoteStatus('conectado');
+    } catch (err) {
+      console.warn('Sincronização com Supabase em modo fallback local:', err);
+      setRemoteStatus('offline_fallback');
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshData();
+  }, [refreshData]);
+
+  // Persistência local imediata para cache / offline
   useEffect(() => {
     saveStoredTickets(tickets);
   }, [tickets]);
@@ -120,7 +200,6 @@ export function useAppStore() {
           new Date(t.dispatch_timeout_at).getTime() <= now
         ) {
           hasChanges = true;
-          // Registra log de timeout para o técnico anterior
           const previousTechId = t.assigned_technician_id;
           const previousTech = technicians.find((tech) => tech.id === previousTechId);
           const excludedIds = [
@@ -162,6 +241,19 @@ export function useAppStore() {
               created_at: new Date().toISOString()
             });
 
+            // Atualiza remotamente no Supabase
+            updateRemoteTicketStatus(
+              t.id,
+              'despachado',
+              {
+                assigned_technician_id: nextCandidate.technician.id,
+                dispatch_attempts: t.dispatch_attempts + 1,
+                dispatch_timeout_at: new Date(Date.now() + 20 * 60 * 1000).toISOString()
+              },
+              { name: 'Motor de Despacho Automático', role: 'sistema' },
+              'despachado'
+            );
+
             return {
               ...t,
               status: 'despachado' as const,
@@ -174,6 +266,14 @@ export function useAppStore() {
             };
           } else {
             // Nenhum técnico elegível disponível: vai para fila de exceção para a Central
+            updateRemoteTicketStatus(
+              t.id,
+              'aberto',
+              { assigned_technician_id: undefined, dispatch_timeout_at: undefined },
+              { name: 'Motor de Despacho Automático', role: 'sistema' },
+              'despachado'
+            );
+
             return {
               ...t,
               status: 'aberto' as const,
@@ -191,7 +291,7 @@ export function useAppStore() {
       if (hasChanges) {
         setTickets(updated);
       }
-    }, 10000); // Checagem a cada 10 segundos
+    }, 10000);
 
     return () => clearInterval(interval);
   }, [tickets, technicians, schools]);
@@ -205,7 +305,7 @@ export function useAppStore() {
   ): Ticket => {
     const school = schools.find((s) => s.id === data.school_id);
     const category = categories.find((c) => c.id === data.category_id);
-    const protocol = generateTicketProtocol();
+    const protocol = generateTicketProtocol(tickets.map((t) => t.protocol));
     const trackingToken = generateTrackingToken();
     const ticketId = `tkt-${Date.now()}`;
 
@@ -304,6 +404,18 @@ export function useAppStore() {
     };
 
     setTickets((prev) => [newTicket, ...prev]);
+
+    // Gravação assíncrona remota no Supabase
+    createRemoteTicket(newTicket, {
+      name: data.requester_name,
+      role: `ROLE_SCHOOL (${data.requester_role})`
+    }).then((res) => {
+      if (res.data && res.data.id !== newTicket.id) {
+        // Atualiza com o UUID remoto gerado pelo banco
+        setTickets((curr) => curr.map((t) => (t.id === newTicket.id ? { ...t, id: res.data!.id } : t)));
+      }
+    });
+
     return newTicket;
   };
 
@@ -311,10 +423,19 @@ export function useAppStore() {
    * 2. PWA Técnico: Aceitar chamado
    */
   const acceptTicket = (ticketId: string, technicianId: string) => {
+    const target = tickets.find((t) => t.id === ticketId);
+    if (!target) return;
+
+    const transitionVal = validateStateTransition(target.status, 'em_deslocamento');
+    if (!transitionVal.valid) {
+      console.warn('Transição rejeitada:', transitionVal.error);
+      return;
+    }
+
+    const tech = technicians.find((tc) => tc.id === technicianId);
     setTickets((prev) =>
       prev.map((t) => {
         if (t.id === ticketId) {
-          const tech = technicians.find((tc) => tc.id === technicianId);
           return {
             ...t,
             status: 'em_deslocamento',
@@ -336,32 +457,44 @@ export function useAppStore() {
         return t;
       })
     );
+
+    updateRemoteTicketStatus(
+      ticketId,
+      'em_deslocamento',
+      { dispatch_timeout_at: undefined },
+      { name: tech?.name || 'Técnico de Campo', role: 'ROLE_TECH' },
+      'despachado'
+    );
   };
 
   /**
    * 3. PWA Técnico: Recusar chamado com justificativa e acionar re-despacho
    */
   const refuseTicket = (ticketId: string, technicianId: string, reason: string) => {
+    const tech = technicians.find((tc) => tc.id === technicianId);
+    const target = tickets.find((t) => t.id === ticketId);
+    if (!target) return;
+
+    const excludedIds = [
+      ...target.dispatch_logs.map((l) => l.technician_id),
+      technicianId
+    ];
+
+    const school = schools.find((s) => s.id === target.school_id);
+    const nextCandidate = school
+      ? getBestCandidateTechnician(school.latitude, school.longitude, technicians, tickets, excludedIds)
+      : null;
+
+    const nextStatus = nextCandidate ? 'despachado' : 'aberto';
+    const transitionVal = validateStateTransition(target.status, nextStatus, { refusalReason: reason });
+    if (!transitionVal.valid) {
+      console.warn('Recusa rejeitada pela máquina de estados:', transitionVal.error);
+      return;
+    }
+
     setTickets((prev) =>
       prev.map((t) => {
         if (t.id === ticketId) {
-          const tech = technicians.find((tc) => tc.id === technicianId);
-          const excludedIds = [
-            ...t.dispatch_logs.map((l) => l.technician_id),
-            technicianId
-          ];
-
-          const school = schools.find((s) => s.id === t.school_id);
-          const nextCandidate = school
-            ? getBestCandidateTechnician(
-                school.latitude,
-                school.longitude,
-                technicians,
-                prev,
-                excludedIds
-              )
-            : null;
-
           const updatedLogs = [
             ...t.dispatch_logs,
             {
@@ -377,7 +510,7 @@ export function useAppStore() {
 
           if (nextCandidate) {
             updatedLogs.push({
-              id: `log-next-${Date.now()}`,
+              id: `log-redisp-${Date.now()}`,
               ticket_id: t.id,
               technician_id: nextCandidate.technician.id,
               technician_name: nextCandidate.technician.name,
@@ -410,14 +543,26 @@ export function useAppStore() {
         return t;
       })
     );
+
+    updateRemoteTicketStatus(
+      ticketId,
+      nextStatus,
+      {
+        assigned_technician_id: nextCandidate?.technician.id || undefined,
+        dispatch_attempts: (target?.dispatch_attempts || 0) + 1,
+        dispatch_timeout_at: nextCandidate ? new Date(Date.now() + 20 * 60 * 1000).toISOString() : undefined
+      },
+      { name: tech?.name || 'Técnico', role: 'ROLE_TECH' },
+      'despachado'
+    );
   };
 
   /**
-   * 4. PWA Técnico: Check-in presencial com validação de raio GPS
+   * 4. PWA Técnico: Check-in por Geofencing no Colégio
    */
   const checkInTechnician = (
     ticketId: string,
-    _technicianId: string,
+    technicianId: string,
     currentLat: number,
     currentLng: number
   ): { success: boolean; distanceKm: number; message: string } => {
@@ -431,6 +576,15 @@ export function useAppStore() {
       return { success: false, distanceKm: 0, message: 'Escola não localizada.' };
     }
 
+    const transitionVal = validateStateTransition(ticket.status, 'em_atendimento', {
+      arrivalCoordinates: { lat: currentLat, lng: currentLng }
+    });
+    if (!transitionVal.valid) {
+      return { success: false, distanceKm: 0, message: transitionVal.error || 'Check-in inválido.' };
+    }
+
+    const tech = technicians.find((tc) => tc.id === technicianId);
+
     const distance = calculateDistanceKm(
       currentLat,
       currentLng,
@@ -438,7 +592,6 @@ export function useAppStore() {
       school.longitude
     );
 
-    // Permite check-in em raio de até 1.5 km do colégio (tolerância de GPS)
     const withinRadius = distance <= 1.5;
 
     setTickets((prev) =>
@@ -455,6 +608,18 @@ export function useAppStore() {
         }
         return t;
       })
+    );
+
+    updateRemoteTicketStatus(
+      ticketId,
+      'em_atendimento',
+      {
+        arrival_lat: currentLat,
+        arrival_lng: currentLng,
+        arrived_at: new Date().toISOString()
+      },
+      { name: tech?.name || ticket.assigned_technician_name || 'Técnico', role: 'ROLE_TECH' },
+      ticket.status
     );
 
     return {
@@ -474,6 +639,15 @@ export function useAppStore() {
     technicianId: string,
     data: QuoteSubmissionData
   ) => {
+    const target = tickets.find((t) => t.id === ticketId);
+    if (!target) return;
+
+    const transitionVal = validateStateTransition(target.status, 'aguardando_orcamento', { quoteData: data });
+    if (!transitionVal.valid) {
+      console.warn('Orçamento rejeitado pela máquina de estados:', transitionVal.error);
+      return;
+    }
+
     const tech = technicians.find((t) => t.id === technicianId);
     const quoteId = `qt-${Date.now()}`;
 
@@ -512,6 +686,14 @@ export function useAppStore() {
         return t;
       })
     );
+
+    updateRemoteTicketStatus(
+      ticketId,
+      'aguardando_orcamento',
+      {},
+      { name: tech?.name || 'Técnico', role: 'ROLE_TECH' },
+      'em_atendimento'
+    );
   };
 
   /**
@@ -523,10 +705,22 @@ export function useAppStore() {
     decisionByName: string,
     reason?: string
   ) => {
+    const target = tickets.find((t) => t.id === ticketId);
+    if (!target) return;
+
+    const nextStatus = approved ? 'aguardando_peca' : 'cancelado';
+    const transitionVal = validateStateTransition(target.status, nextStatus, {
+      quoteDecision: { approved, reason },
+      cancelReason: reason
+    });
+    if (!transitionVal.valid) {
+      console.warn('Decisão de orçamento rejeitada pela máquina de estados:', transitionVal.error);
+      return;
+    }
+
     setTickets((prev) =>
       prev.map((t) => {
         if (t.id === ticketId && t.quote) {
-          const nextStatus = approved ? 'aguardando_peca' : 'cancelado';
           return {
             ...t,
             status: nextStatus,
@@ -543,6 +737,14 @@ export function useAppStore() {
         return t;
       })
     );
+
+    updateRemoteTicketStatus(
+      ticketId,
+      nextStatus,
+      {},
+      { name: decisionByName, role: 'GESTOR_OU_CENTRAL' },
+      'aguardando_orcamento'
+    );
   };
 
   /**
@@ -553,6 +755,15 @@ export function useAppStore() {
     technicianId: string,
     data: TicketCompletionData
   ) => {
+    const target = tickets.find((t) => t.id === ticketId);
+    if (!target) return;
+
+    const transitionVal = validateStateTransition(target.status, 'concluido', { completionData: data });
+    if (!transitionVal.valid) {
+      console.warn('Conclusão rejeitada pela máquina de estados:', transitionVal.error);
+      return;
+    }
+
     const tech = technicians.find((t) => t.id === technicianId);
     const completionId = `cmp-${Date.now()}`;
 
@@ -579,6 +790,14 @@ export function useAppStore() {
         }
         return t;
       })
+    );
+
+    updateRemoteTicketStatus(
+      ticketId,
+      'concluido',
+      { resolved_at: new Date().toISOString() },
+      { name: tech?.name || 'Técnico', role: 'ROLE_TECH' },
+      'em_atendimento'
     );
   };
 
@@ -624,6 +843,13 @@ export function useAppStore() {
         return t;
       })
     );
+
+    updateRemoteTicketStatus(
+      ticketId,
+      'visita_agendada',
+      { scheduled_visit_at: scheduledAt, scheduled_visit_notes: notes },
+      { name: 'Técnico de Campo', role: 'ROLE_TECH' }
+    );
   };
 
   /**
@@ -655,10 +881,17 @@ export function useAppStore() {
         return t;
       })
     );
+
+    updateRemoteTicketStatus(
+      ticketId,
+      'aguardando_peca',
+      { pending_part_notes: partNotes },
+      { name: 'Técnico de Campo', role: 'ROLE_TECH' }
+    );
   };
 
   /**
-   * 10. PWA Técnico / Central: Sinalizar Aguardando Serviço de Terceiros (ex: Operadora, Neoenergia)
+   * 10. PWA Técnico / Central: Sinalizar Aguardando Serviço de Terceiros
    */
   const setWaitingThirdParty = (ticketId: string, thirdPartyNotes: string) => {
     setTickets((prev) =>
@@ -686,6 +919,13 @@ export function useAppStore() {
         return t;
       })
     );
+
+    updateRemoteTicketStatus(
+      ticketId,
+      'aguardando_terceiro',
+      { third_party_notes: thirdPartyNotes },
+      { name: 'Técnico / Central', role: 'ROLE_TECH' }
+    );
   };
 
   /**
@@ -703,6 +943,13 @@ export function useAppStore() {
         }
         return t;
       })
+    );
+
+    updateRemoteTicketStatus(
+      ticketId,
+      'em_atendimento',
+      {},
+      { name: 'Técnico de Campo', role: 'ROLE_TECH' }
     );
   };
 
@@ -751,6 +998,17 @@ export function useAppStore() {
         }
         return t;
       })
+    );
+
+    updateRemoteTicketStatus(
+      ticketId,
+      'despachado',
+      {
+        assigned_technician_id: tech.id,
+        dispatch_attempts: 1,
+        dispatch_timeout_at: new Date(Date.now() + 20 * 60 * 1000).toISOString()
+      },
+      { name: 'Operador da Central', role: 'ROLE_ADMIN' }
     );
   };
 
@@ -841,6 +1099,9 @@ export function useAppStore() {
     schools,
     categories,
     regions,
+    remoteStatus,
+    isSyncing,
+    refreshData,
     createTicket,
     acceptTicket,
     refuseTicket,

@@ -8,6 +8,7 @@ import type {
   SystemUser
 } from '../data/seedData';
 import { getBestCandidateTechnician } from '../lib/geoEngine';
+import { SUPABASE_MASTER_DDL } from '../data/supabaseDdl';
 import {
   Kanban,
   FileSpreadsheet,
@@ -16,6 +17,7 @@ import {
   Building2,
   Users,
   AlertTriangle,
+  AlertCircle,
   CheckCircle2,
   Filter,
   DollarSign,
@@ -29,8 +31,15 @@ import {
   Phone,
   Mail,
   Search,
-  X
+  X,
+  BarChart3,
+  Clock
 } from 'lucide-react';
+import {
+  calculateTicketSla,
+  calculateSlaReport,
+  exportOperationalReportCsv
+} from '../lib/slaEngine';
 
 interface CentralAdminDashboardProps {
   tickets: Ticket[];
@@ -61,7 +70,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   regions,
   categories: _categories,
   onManualDispatch,
-  onDecideQuote: _onDecideQuote,
+  onDecideQuote,
   onViewOS,
   onCreateTechnician,
   onUpdateTechnician,
@@ -73,13 +82,21 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   onToggleSystemUserActive,
   onResetDatabase
 }) => {
-  const [activeTab, setActiveTab] = useState<'kanban' | 'prestacao' | 'despacho' | 'tecnicos' | 'usuarios' | 'sql'>('kanban');
+  const [activeTab, setActiveTab] = useState<'kanban' | 'prestacao' | 'despacho' | 'sla' | 'tecnicos' | 'usuarios' | 'sql'>('kanban');
   const [selectedCre, setSelectedCre] = useState<string>('todas');
   const [selectedUrgency, setSelectedUrgency] = useState<string>('todas');
 
   // Estado para simulação de despacho
   const [simSchoolId, setSimSchoolId] = useState<string>(schools[0]?.id || '');
   const [manualDispatchTechId, setManualDispatchTechId] = useState<Record<string, string>>({});
+
+  // Estados para Decisão de Orçamento (Aprovação ou Reprovação/Cancelamento)
+  const [rejectingQuoteTicket, setRejectingQuoteTicket] = useState<Ticket | null>(null);
+  const [quoteDecisionReason, setQuoteDecisionReason] = useState<string>('');
+
+  // Estado para Confirmação Segura de Reset de Dados
+  const [showResetConfirmModal, setShowResetConfirmModal] = useState<boolean>(false);
+  const [resetConfirmText, setResetConfirmText] = useState<string>('');
 
   // Estados para Gestão de Técnicos (CRUD)
   const [searchTech, setSearchTech] = useState('');
@@ -277,20 +294,30 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
       )
     : null;
 
-  // Baixar script SQL
+  // Baixar script SQL Master atualizado
   const downloadSchemaSql = () => {
     const element = document.createElement('a');
-    const file = new Blob(
-      [
-        `-- Schema SQL do Supabase - HelpTech Escolas DF\n-- Baixado via Painel Central de Operações\n`
-      ],
-      { type: 'text/plain' }
-    );
+    const file = new Blob([SUPABASE_MASTER_DDL], { type: 'text/plain' });
     element.href = URL.createObjectURL(file);
     element.download = 'service_desk_escolas_df_schema.sql';
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
+  };
+
+  // Relatório Executivo de SLAs
+  const slaReport = calculateSlaReport(tickets, regions, technicians);
+
+  const downloadOperationalCsv = () => {
+    const csvContent = exportOperationalReportCsv(tickets);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `relatorio_operacional_seedf_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -379,6 +406,16 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
             <Cpu size={14} /> Motor de Despacho Geo
           </button>
           <button
+            onClick={() => setActiveTab('sla')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors ${
+              activeTab === 'sla'
+                ? 'bg-blue-600 text-white shadow'
+                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <BarChart3 size={14} /> Governança & SLA
+          </button>
+          <button
             onClick={() => setActiveTab('tecnicos')}
             className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors ${
               activeTab === 'tecnicos'
@@ -411,10 +448,16 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
         </div>
 
         <button
-          onClick={onResetDatabase}
-          className="text-xs text-slate-400 hover:text-rose-600 transition-colors"
+          type="button"
+          onClick={() => {
+            setResetConfirmText('');
+            setShowResetConfirmModal(true);
+          }}
+          className="text-xs text-slate-400 hover:text-rose-600 transition-colors flex items-center gap-1 font-semibold"
+          title="Ação administrativa restrita"
         >
-          Restaurar Banco de Dados Demo
+          <AlertTriangle size={13} />
+          <span>Restaurar Banco de Dados Demo</span>
         </button>
       </div>
 
@@ -513,6 +556,18 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                         <div className="text-[10px] text-slate-400">CRE {ticket.cre_name}</div>
                       </div>
 
+                      {(() => {
+                        const sla = calculateTicketSla(ticket);
+                        return (
+                          <div className="flex items-center gap-1">
+                            <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded border ${sla.badgeColor}`}>
+                              <Clock size={9} />
+                              <span>{sla.label}</span>
+                            </span>
+                          </div>
+                        );
+                      })()}
+
                       {ticket.assigned_technician_name && (
                         <div className="text-[10px] bg-slate-50 p-1.5 rounded-lg border border-slate-100 text-slate-600 truncate">
                           Técnico: <strong>{ticket.assigned_technician_name}</strong>
@@ -556,6 +611,35 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                         </div>
                       )}
 
+                      {/* Decisão rápida de Orçamento no Kanban */}
+                      {ticket.status === 'aguardando_orcamento' && ticket.quote && ticket.quote.status === 'pendente' && (
+                        <div className="pt-2 border-t border-amber-200 bg-amber-50/70 p-2 rounded-lg space-y-1.5">
+                          <div className="flex items-center justify-between text-[10px] font-bold text-amber-900">
+                            <span>Orçamento: R$ {ticket.quote.total_amount.toFixed(2)}</span>
+                            <span className="text-amber-700 font-semibold">{ticket.quote.items.length} item(ns)</span>
+                          </div>
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              onClick={() => onDecideQuote(ticket.id, true, 'Controladoria Central / CRE')}
+                              className="flex-1 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded shadow-xs"
+                            >
+                              Aprovar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRejectingQuoteTicket(ticket);
+                                setQuoteDecisionReason('');
+                              }}
+                              className="flex-1 py-1 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold rounded shadow-xs"
+                            >
+                              Reprovar / Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       <button
                         onClick={() => onViewOS(ticket)}
                         className="w-full text-center text-[10px] font-semibold text-blue-600 hover:text-blue-800 pt-1 block"
@@ -573,6 +657,152 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ABA: GOVERNANÇA, MÉTRICAS E SLA EXECUTIVO */}
+      {activeTab === 'sla' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-bold mb-1 border border-blue-200">
+                <BarChart3 size={12} /> Painel Executivo SEEDF
+              </div>
+              <h3 className="font-extrabold text-base text-slate-900">
+                Governança de SLA & Desempenho Regional
+              </h3>
+              <p className="text-xs text-slate-500">
+                Metas contratuais: Primeiro Atendimento em até 4h • Resolução Completa em até 48h
+              </p>
+            </div>
+            <button
+              onClick={downloadOperationalCsv}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-colors"
+            >
+              <Download size={14} /> Exportar Relatório CSV da SEEDF
+            </button>
+          </div>
+
+          {/* Cards de Métricas de SLA */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                Taxa de Cumprimento SLA
+              </span>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span
+                  className={`text-2xl font-black ${
+                    slaReport.slaComplianceRate >= 90
+                      ? 'text-emerald-600'
+                      : slaReport.slaComplianceRate >= 75
+                      ? 'text-amber-600'
+                      : 'text-rose-600'
+                  }`}
+                >
+                  {slaReport.slaComplianceRate}%
+                </span>
+                <span className="text-[10px] text-slate-400">Meta: 95%</span>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">
+                {slaReport.completedTickets} chamados finalizados
+              </p>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                No Prazo (Operação Ativa)
+              </span>
+              <div className="text-2xl font-black text-blue-600 mt-1">
+                {slaReport.onTrackCount}
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">Tempo restante confortável</p>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                Em Risco (&lt; 8h restantes)
+              </span>
+              <div className="text-2xl font-black text-amber-600 mt-1">
+                {slaReport.atRiskCount}
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">Exige atenção da expedição</p>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                Prazo Estourado (&gt; 48h)
+              </span>
+              <div className="text-2xl font-black text-rose-600 mt-1">
+                {slaReport.breachedCount}
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">Passível de penalidade</p>
+            </div>
+          </div>
+
+          {/* Duas Colunas: Distribuição por CRE e Produtividade dos Técnicos */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Distribuição por CRE */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+              <div className="flex items-center justify-between border-b pb-2">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <Building2 size={14} className="text-blue-600" /> Distribuição de Demandas por CRE
+                </h4>
+                <span className="text-[10px] font-bold text-slate-400">15 Regionais DF</span>
+              </div>
+
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                {slaReport.creDistribution.map((item) => (
+                  <div key={item.creName} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                      <span>CRE {item.creName}</span>
+                      <span className="text-slate-500 text-[11px]">
+                        {item.count} chamado(s) ({item.percentage}%)
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all"
+                        style={{ width: `${Math.max(item.percentage, item.count > 0 ? 5 : 0)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Produtividade dos Técnicos */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+              <div className="flex items-center justify-between border-b pb-2">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <Wrench size={14} className="text-emerald-600" /> Desempenho e Produtividade Técnica
+                </h4>
+                <span className="text-[10px] font-bold text-slate-400">{technicians.length} Credenciados</span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase font-bold">
+                    <tr>
+                      <th className="p-2">Técnico</th>
+                      <th className="p-2 text-center">Ativos</th>
+                      <th className="p-2 text-center">Concluídos</th>
+                      <th className="p-2 text-right">Média Horas</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {slaReport.technicianPerformance.map((tech) => (
+                      <tr key={tech.techId} className="hover:bg-slate-50/70">
+                        <td className="p-2 font-semibold text-slate-800">{tech.techName}</td>
+                        <td className="p-2 text-center font-mono font-bold text-blue-600">{tech.activeCount}</td>
+                        <td className="p-2 text-center font-mono font-bold text-emerald-600">{tech.completedCount}</td>
+                        <td className="p-2 text-right font-mono text-slate-600">{tech.avgHours}h</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -636,12 +866,54 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                         R$ {t.quote?.total_amount.toFixed(2)}
                       </td>
                       <td className="p-3 text-center">
-                        <button
-                          onClick={() => onViewOS(t)}
-                          className="text-blue-600 hover:text-blue-800 font-bold text-[11px]"
-                        >
-                          Ver OS
-                        </button>
+                        {t.quote?.status === 'pendente' ? (
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => onDecideQuote(t.id, true, 'Controladoria HelpTech / CRE')}
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold shadow-xs transition-colors"
+                              title="Aprovar Orçamento"
+                            >
+                              Aprovar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRejectingQuoteTicket(t);
+                                setQuoteDecisionReason('');
+                              }}
+                              className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-[10px] font-bold shadow-xs transition-colors"
+                              title="Reprovar Orçamento e Cancelar Chamado"
+                            >
+                              Reprovar / Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onViewOS(t)}
+                              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[10px] font-bold"
+                            >
+                              Ver OS
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => onViewOS(t)}
+                              className="text-blue-600 hover:text-blue-800 font-bold text-[11px]"
+                            >
+                              Ver OS
+                            </button>
+                            {t.quote?.decision_reason && (
+                              <span
+                                className="text-[10px] text-slate-400 italic max-w-[150px] truncate"
+                                title={t.quote.decision_reason}
+                              >
+                                ({t.quote.decision_reason})
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -762,228 +1034,18 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
             </div>
             <div className="flex flex-wrap gap-2">
               <button
+                type="button"
                 onClick={async () => {
                   try {
-                    const fullSql = `-- PLATAFORMA DE SERVICE DESK & FIELD SERVICE - ESCOLAS PÚBLICAS DF
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS cube;
-CREATE EXTENSION IF NOT EXISTS earthdistance;
-
-CREATE TABLE IF NOT EXISTS regional_coordinations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    code VARCHAR(50) UNIQUE NOT NULL,
-    name VARCHAR(120) NOT NULL,
-    active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS schools (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    cre_id UUID NOT NULL REFERENCES regional_coordinations(id) ON DELETE RESTRICT,
-    inep VARCHAR(20) UNIQUE NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    address TEXT NOT NULL,
-    latitude FLOAT NOT NULL,
-    longitude FLOAT NOT NULL,
-    contact_phone VARCHAR(20),
-    contact_email VARCHAR(150),
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_schools_cre ON schools(cre_id);
-CREATE INDEX IF NOT EXISTS idx_schools_inep ON schools(inep);
-CREATE INDEX IF NOT EXISTS idx_schools_geo ON schools USING gist (ll_to_earth(latitude, longitude));
-
-CREATE TABLE IF NOT EXISTS technicians (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    auth_user_id UUID UNIQUE,
-    name VARCHAR(150) NOT NULL,
-    phone VARCHAR(20) NOT NULL UNIQUE,
-    email VARCHAR(150) UNIQUE,
-    primary_cre_id UUID REFERENCES regional_coordinations(id),
-    latitude FLOAT NOT NULL,
-    longitude FLOAT NOT NULL,
-    radius_km INT DEFAULT 30,
-    max_active_tickets INT DEFAULT 4,
-    status VARCHAR(30) DEFAULT 'disponivel' CHECK (status IN ('disponivel', 'ocupado', 'indisponivel', 'suspenso')),
-    active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_technicians_geo ON technicians USING gist (ll_to_earth(latitude, longitude));
-
-CREATE TABLE IF NOT EXISTS ticket_categories (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(100) NOT NULL,
-    sla_response_hours INT DEFAULT 4,
-    sla_resolution_hours INT DEFAULT 48,
-    active BOOLEAN DEFAULT TRUE
-);
-
-CREATE TABLE IF NOT EXISTS tickets (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    protocol VARCHAR(30) UNIQUE NOT NULL,
-    tracking_token VARCHAR(64) UNIQUE NOT NULL,
-    school_id UUID NOT NULL REFERENCES schools(id) ON DELETE RESTRICT,
-    category_id UUID NOT NULL REFERENCES ticket_categories(id) ON DELETE RESTRICT,
-    requester_name VARCHAR(150) NOT NULL,
-    requester_role VARCHAR(100) NOT NULL,
-    requester_phone VARCHAR(20) NOT NULL,
-    title VARCHAR(200) NOT NULL,
-    description TEXT NOT NULL,
-    equipment_patrimony VARCHAR(100),
-    urgency_level VARCHAR(20) DEFAULT 'media' CHECK (urgency_level IN ('baixa', 'media', 'alta', 'critica')),
-    status VARCHAR(30) DEFAULT 'aberto' CHECK (status IN (
-        'aberto',
-        'despachado',
-        'em_deslocamento',
-        'em_atendimento',
-        'aguardando_orcamento',
-        'aguardando_peca',
-        'concluido',
-        'cancelado'
-    )),
-    assigned_technician_id UUID REFERENCES technicians(id) ON DELETE SET NULL,
-    dispatch_attempts INT DEFAULT 0,
-    dispatch_timeout_at TIMESTAMPTZ,
-    arrival_lat FLOAT,
-    arrival_lng FLOAT,
-    arrived_at TIMESTAMPTZ,
-    resolved_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_tickets_school ON tickets(school_id);
-CREATE INDEX IF NOT EXISTS idx_tickets_tech ON tickets(assigned_technician_id);
-CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
-CREATE INDEX IF NOT EXISTS idx_tickets_token ON tickets(tracking_token);
-
-CREATE TABLE IF NOT EXISTS ticket_dispatch_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-    technician_id UUID NOT NULL REFERENCES technicians(id) ON DELETE CASCADE,
-    status VARCHAR(30) NOT NULL CHECK (status IN ('notificado', 'aceito', 'recusado', 'timeout')),
-    refusal_reason TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS ticket_attachments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-    phase VARCHAR(20) NOT NULL CHECK (phase IN ('abertura', 'diagnostico', 'conclusao')),
-    file_url TEXT NOT NULL,
-    file_type VARCHAR(50),
-    file_size_bytes INT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS ticket_quotes (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-    technician_id UUID NOT NULL REFERENCES technicians(id) ON DELETE RESTRICT,
-    total_amount NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
-    technical_diagnosis TEXT NOT NULL,
-    pdf_url TEXT,
-    status VARCHAR(30) DEFAULT 'pendente' CHECK (status IN ('pendente', 'aprovado', 'rejeitado', 'cancelado')),
-    decision_by_name VARCHAR(150),
-    decision_reason TEXT,
-    decided_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS ticket_quote_items (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    quote_id UUID NOT NULL REFERENCES ticket_quotes(id) ON DELETE CASCADE,
-    item_type VARCHAR(20) NOT NULL CHECK (item_type IN ('peca', 'servico')),
-    item_name VARCHAR(200) NOT NULL,
-    quantity INT NOT NULL DEFAULT 1,
-    unit_price NUMERIC(10, 2) NOT NULL,
-    subtotal NUMERIC(10, 2) NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS ticket_completions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    ticket_id UUID UNIQUE NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-    technician_id UUID NOT NULL REFERENCES technicians(id),
-    service_summary TEXT NOT NULL,
-    school_representative_name VARCHAR(150) NOT NULL,
-    school_representative_doc VARCHAR(50) NOT NULL,
-    signature_svg TEXT NOT NULL,
-    pdf_os_url TEXT,
-    completed_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE OR REPLACE FUNCTION get_best_candidate_technician(
-    p_school_lat FLOAT, 
-    p_school_lng FLOAT,
-    p_excluded_techs UUID[] DEFAULT ARRAY[]::UUID[]
-)
-RETURNS TABLE (
-    technician_id UUID,
-    name VARCHAR,
-    phone VARCHAR,
-    distance_km FLOAT,
-    active_load BIGINT
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT 
-        t.id,
-        t.name,
-        t.phone,
-        ROUND((point(t.longitude, t.latitude) <@> point(p_school_lng, p_school_lat)) * 1.609344, 2) AS distance_km,
-        COUNT(tk.id) AS active_load
-    FROM technicians t
-    LEFT JOIN tickets tk ON tk.assigned_technician_id = t.id 
-        AND tk.status IN ('despachado', 'em_deslocamento', 'em_atendimento', 'aguardando_peca')
-    WHERE t.status = 'disponivel' 
-      AND t.active = TRUE
-      AND (p_excluded_techs IS NULL OR t.id != ALL(p_excluded_techs))
-    GROUP BY t.id, t.name, t.phone, t.longitude, t.latitude, t.max_active_tickets, t.radius_km
-    HAVING COUNT(tk.id) < t.max_active_tickets
-       AND ROUND((point(t.longitude, t.latitude) <@> point(p_school_lng, p_school_lat)) * 1.609344, 2) <= t.radius_km
-    ORDER BY distance_km ASC, active_load ASC
-    LIMIT 1;
-END;
-$$ LANGUAGE plpgsql;
-
-INSERT INTO regional_coordinations (code, name) VALUES
-('CRE_BRAZLANDIA', 'Brazlândia'),
-('CRE_CEILANDIA', 'Ceilândia'),
-('CRE_GAMA', 'Gama'),
-('CRE_GUARA', 'Guará'),
-('CRE_NUCLEO_BANDEIRANTE', 'Núcleo Bandeirante'),
-('CRE_PARANOA', 'Paranoá'),
-('CRE_PARANOA_ITAPOA', 'Paranoá/Itapoã'),
-('CRE_PLANALTINA', 'Planaltina'),
-('CRE_PLANO_PILOTO', 'Plano Piloto'),
-('CRE_RECANTO_DAS_EMAS', 'Recanto das Emas'),
-('CRE_SAMAMBAIA', 'Samambaia'),
-('CRE_SANTA_MARIA', 'Santa Maria'),
-('CRE_SAO_SEBASTIAO', 'São Sebastião'),
-('CRE_SOBRADINHO', 'Sobradinho'),
-('CRE_TAGUATINGA', 'Taguatinga')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO ticket_categories (name, sla_response_hours, sla_resolution_hours) VALUES
-('Rede & Conectividade de Internet', 2, 24),
-('Laboratório de Informática / Computadores', 4, 48),
-('Projetores & Telas Interativas', 4, 48),
-('Impressoras & Scanners Administrativos', 8, 72),
-('Servidores & Roteadores Wi-Fi', 2, 12),
-('Elétrica de TI / No-breaks & Nobreaks', 2, 24)
-ON CONFLICT DO NOTHING;`;
-                    await navigator.clipboard.writeText(fullSql);
-                    alert('Código SQL copiado para a área de transferência! Cole no SQL Editor do Supabase.');
-                  } catch (e) {
+                    await navigator.clipboard.writeText(SUPABASE_MASTER_DDL);
+                    alert('Código DDL Completo copiado para a área de transferência! Cole no SQL Editor do Supabase.');
+                  } catch {
                     alert('Falha ao copiar automaticamente. Use o botão Baixar schema.sql');
                   }
                 }}
                 className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow"
               >
-                Copiar DDL Completo
+                Copiar DDL Completo (v2.1)
               </button>
               <button
                 onClick={downloadSchemaSql}
@@ -1229,7 +1291,9 @@ $$ LANGUAGE plpgsql;`}
                                       `Tem certeza de que deseja remover o técnico "${tech.name}" da base HelpTech?`
                                     )
                                   ) {
-                                    onDeleteTechnician && onDeleteTechnician(tech.id);
+                                    if (onDeleteTechnician) {
+                                      onDeleteTechnician(tech.id);
+                                    }
                                   }
                                 }}
                                 className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
@@ -1429,7 +1493,9 @@ $$ LANGUAGE plpgsql;`}
                                       `Tem certeza de que deseja remover o usuário "${user.name}"?`
                                     )
                                   ) {
-                                    onDeleteSystemUser && onDeleteSystemUser(user.id);
+                                    if (onDeleteSystemUser) {
+                                      onDeleteSystemUser(user.id);
+                                    }
                                   }
                                 }}
                                 className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
@@ -1720,6 +1786,136 @@ $$ LANGUAGE plpgsql;`}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL DE JUSTIFICATIVA PARA REPROVAR ORÇAMENTO E CANCELAR CHAMADO */}
+      {rejectingQuoteTicket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl p-5 max-w-md w-full space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b pb-2.5">
+              <h4 className="font-bold text-sm text-rose-700 flex items-center gap-2">
+                <AlertCircle size={18} /> Reprovar Orçamento & Cancelar Chamado
+              </h4>
+              <button
+                type="button"
+                onClick={() => setRejectingQuoteTicket(null)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              Ao reprovar o orçamento do chamado <strong>{rejectingQuoteTicket.protocol}</strong> ({rejectingQuoteTicket.school_name}), a Ordem de Serviço será <strong>cancelada</strong> e o técnico e a escola serão notificados com o parecer oficial.
+            </p>
+
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+              <span className="text-slate-500 block text-[10px] uppercase font-bold">Valor Orçado:</span>
+              <strong className="text-slate-800 text-sm">R$ {rejectingQuoteTicket.quote?.total_amount.toFixed(2)}</strong>
+              <p className="text-[11px] text-slate-600 mt-1">
+                Laudo Técnico: "{rejectingQuoteTicket.quote?.technical_diagnosis}"
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                Justificativa Obrigatória da Reprovação / Cancelamento *
+              </label>
+              <textarea
+                rows={3}
+                value={quoteDecisionReason}
+                onChange={(e) => setQuoteDecisionReason(e.target.value)}
+                placeholder="Ex: Valor excede tabela contratual com a SEEDF / Equipamento obsoleto com recomendação de baixa patrimonial..."
+                className="w-full text-xs p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-rose-500 outline-none"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                disabled={!quoteDecisionReason.trim()}
+                onClick={() => {
+                  onDecideQuote(
+                    rejectingQuoteTicket.id,
+                    false,
+                    'Controladoria HelpTech / CRE',
+                    quoteDecisionReason.trim()
+                  );
+                  setRejectingQuoteTicket(null);
+                  setQuoteDecisionReason('');
+                }}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-colors shadow"
+              >
+                Confirmar Reprovação & Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => setRejectingQuoteTicket(null)}
+                className="py-2.5 px-4 bg-slate-100 text-slate-700 text-xs font-semibold rounded-xl"
+              >
+                Voltar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE SEGURANÇA: CONFIRMAÇÃO DE RESTAURAÇÃO / RESET DE BANCO */}
+      {showResetConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl border border-rose-200">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2.5 bg-rose-100 rounded-2xl">
+                <AlertTriangle size={24} />
+              </div>
+              <div>
+                <h4 className="font-extrabold text-base text-slate-900">Ação Destrutiva: Restaurar Dados</h4>
+                <p className="text-xs text-rose-600 font-semibold">Atenção: Esta ação não pode ser desfeita</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Todos os chamados em andamento, ordens de serviço, cadastros de técnicos e histórico local serão <strong>removidos e resetados</strong> para a carga inicial limpa.
+            </p>
+
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                Para autorizar, digite exatamente <span className="font-mono text-rose-600 font-extrabold">CONFIRMAR-RESET</span> abaixo:
+              </label>
+              <input
+                type="text"
+                value={resetConfirmText}
+                onChange={(e) => setResetConfirmText(e.target.value)}
+                placeholder="CONFIRMAR-RESET"
+                className="w-full p-2 border border-slate-300 rounded-lg text-xs font-mono uppercase font-bold focus:ring-2 focus:ring-rose-500 outline-none"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowResetConfirmModal(false);
+                  setResetConfirmText('');
+                }}
+                className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl font-bold text-xs transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={resetConfirmText !== 'CONFIRMAR-RESET'}
+                onClick={() => {
+                  onResetDatabase();
+                  setShowResetConfirmModal(false);
+                  setResetConfirmText('');
+                }}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white rounded-xl font-bold text-xs transition-colors shadow-sm"
+              >
+                Executar Reset Seguro
+              </button>
+            </div>
           </div>
         </div>
       )}

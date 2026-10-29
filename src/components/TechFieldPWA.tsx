@@ -22,8 +22,12 @@ import {
   Calendar,
   Package,
   ExternalLink,
-  MessageSquare
+  MessageSquare,
+  Wifi,
+  WifiOff,
+  RefreshCw
 } from 'lucide-react';
+import { useOfflineStatus } from '../lib/offlineQueue';
 
 interface TechFieldPWAProps {
   technicians: Technician[];
@@ -99,6 +103,14 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
     dist: number;
   } | null>(null);
 
+  // Aba ativa de visualização do técnico
+  const [techTab, setTechTab] = useState<'ativos' | 'aguardando' | 'concluidos' | 'cancelados'>('ativos');
+  // Chamado selecionado para visualizar a linha do tempo completa de andamento
+  const [timelineTicket, setTimelineTicket] = useState<Ticket | null>(null);
+
+  // Monitoramento de conexão e fila offline
+  const { isOnline, pendingCount, isFlushing, setIsFlushing, refreshQueue } = useOfflineStatus();
+
   const handleOpenWhatsApp = (phone: string, protocol: string, schoolName: string, requesterName: string) => {
     const cleanPhone = phone.replace(/\D/g, '');
     const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
@@ -117,17 +129,18 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
   // Chamado despachado aguardando aceite (timeout de 20 min ativo)
   const pendingDispatchTicket = techTickets.find((t) => t.status === 'despachado');
 
-  // Chamado em atendimento ou deslocamento ativo
-  const activeWorkingTickets = techTickets.filter((t) =>
-    [
-      'visita_agendada',
-      'em_deslocamento',
-      'em_atendimento',
-      'aguardando_orcamento',
-      'aguardando_peca',
-      'aguardando_terceiro'
-    ].includes(t.status)
+  // Separação refinada para acompanhamento completo pelo técnico
+  const inProgressTickets = techTickets.filter((t) =>
+    ['visita_agendada', 'em_deslocamento', 'em_atendimento'].includes(t.status)
   );
+
+  const waitingTickets = techTickets.filter((t) =>
+    ['aguardando_orcamento', 'aguardando_peca', 'aguardando_terceiro'].includes(t.status)
+  );
+
+  const completedTickets = techTickets.filter((t) => t.status === 'concluido');
+
+  const cancelledTickets = techTickets.filter((t) => t.status === 'cancelado');
 
   // Cálculo de tempo restante de timeout (20 min)
   const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number>(0);
@@ -239,10 +252,48 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
               <p className="text-[11px] text-slate-400">Atendimento Técnico DF</p>
             </div>
           </div>
-          <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> GPS Ativo
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full border ${
+                isOnline
+                  ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                  : 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+              }`}
+            >
+              {isOnline ? <Wifi size={12} /> : <WifiOff size={12} />}
+              <span>{isOnline ? 'GPS Online' : 'Modo Offline'}</span>
+            </span>
+          </div>
         </div>
+
+        {/* Banner de Sincronização da Fila Offline */}
+        {pendingCount > 0 && (
+          <div className="mt-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl p-2.5 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <WifiOff size={15} className="text-amber-400 shrink-0" />
+              <div>
+                <p className="font-bold text-amber-300 text-[11px]">Fila Offline Ativa</p>
+                <p className="text-[10px] text-amber-200/80">
+                  {pendingCount} ação(ões) pendente(s) de envio.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setIsFlushing(true);
+                setTimeout(() => {
+                  setIsFlushing(false);
+                  refreshQueue();
+                }, 800);
+              }}
+              disabled={isFlushing}
+              className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 shadow disabled:opacity-50"
+            >
+              <RefreshCw size={10} className={isFlushing ? 'animate-spin' : ''} />
+              <span>{isFlushing ? 'Enviando...' : 'Sincronizar'}</span>
+            </button>
+          </div>
+        )}
 
         {/* Seletor de Perfil do Técnico */}
         <div className="mt-4 pt-3 border-t border-slate-800">
@@ -380,27 +431,103 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
         </div>
       )}
 
-      {/* LISTA DE CHAMADOS EM ATENDIMENTO / ROTA DO TÉCNICO */}
+      {/* NAVEGAÇÃO DE ANDAMENTO DOS CHAMADOS DO TÉCNICO */}
+      <div className="bg-slate-200/80 p-1 rounded-2xl flex items-center gap-1 text-[11px] font-bold shadow-inner">
+        <button
+          type="button"
+          onClick={() => setTechTab('ativos')}
+          className={`flex-1 py-1.5 rounded-xl transition-all flex items-center justify-center gap-1 ${
+            techTab === 'ativos'
+              ? 'bg-white text-blue-700 shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <span>Em Rota</span>
+          <span className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0.5 rounded-full font-extrabold">
+            {inProgressTickets.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setTechTab('aguardando')}
+          className={`flex-1 py-1.5 rounded-xl transition-all flex items-center justify-center gap-1 ${
+            techTab === 'aguardando'
+              ? 'bg-white text-amber-700 shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <span>Aguardando</span>
+          <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.5 rounded-full font-extrabold">
+            {waitingTickets.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setTechTab('concluidos')}
+          className={`flex-1 py-1.5 rounded-xl transition-all flex items-center justify-center gap-1 ${
+            techTab === 'concluidos'
+              ? 'bg-white text-emerald-700 shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <span>Concluídos</span>
+          <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.5 rounded-full font-extrabold">
+            {completedTickets.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setTechTab('cancelados')}
+          className={`flex-1 py-1.5 rounded-xl transition-all flex items-center justify-center gap-1 ${
+            techTab === 'cancelados'
+              ? 'bg-white text-rose-700 shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <span>Cancelados</span>
+          <span className="bg-rose-100 text-rose-800 text-[10px] px-1.5 py-0.5 rounded-full font-extrabold">
+            {cancelledTickets.length}
+          </span>
+        </button>
+      </div>
+
+      {/* LISTA DE CHAMADOS FILTRADA POR ABA DE ANDAMENTO */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-            Ordens de Serviço em Execução ({activeWorkingTickets.length})
+            {techTab === 'ativos' && `Chamados em Atendimento / Rota (${inProgressTickets.length})`}
+            {techTab === 'aguardando' && `Chamados Aguardando Resposta ou Peça (${waitingTickets.length})`}
+            {techTab === 'concluidos' && `Chamados Finalizados com Sucesso (${completedTickets.length})`}
+            {techTab === 'cancelados' && `Chamados Cancelados / Orçamento Reprovado (${cancelledTickets.length})`}
           </h4>
         </div>
 
-        {activeWorkingTickets.length === 0 && !pendingDispatchTicket && (
+        {/* MENSAGEM QUANDO A ABA ESTIVER VAZIA */}
+        {(techTab === 'ativos' ? inProgressTickets : techTab === 'aguardando' ? waitingTickets : techTab === 'concluidos' ? completedTickets : cancelledTickets).length === 0 && !pendingDispatchTicket && (
           <div className="bg-white rounded-3xl p-8 text-center border border-slate-200 shadow-sm space-y-2">
             <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto">
               <Wrench size={24} />
             </div>
-            <h5 className="font-bold text-xs text-slate-800">Nenhum chamado em aberto no momento</h5>
+            <h5 className="font-bold text-xs text-slate-800">
+              {techTab === 'ativos' && 'Nenhum chamado em rota ativa no momento'}
+              {techTab === 'aguardando' && 'Nenhum chamado aguardando peças ou orçamento'}
+              {techTab === 'concluidos' && 'Nenhum chamado concluído ainda'}
+              {techTab === 'cancelados' && 'Nenhum chamado cancelado'}
+            </h5>
             <p className="text-[11px] text-slate-400">
-              Você está com status disponível. Novos chamados da CRE serão direcionados automaticamente.
+              {techTab === 'ativos' && 'Você está disponível. Novos chamados despachados tocarão o alerta sonoro e visual acima.'}
+              {techTab === 'aguardando' && 'Assim que você lançar um orçamento ou pedir uma peça, o chamado ficará catalogado nesta aba.'}
+              {techTab === 'concluidos' && 'Chamados concluídos com assinatura digital do gestor escolar ficarão arquivados aqui.'}
+              {techTab === 'cancelados' && 'Chamados cujo orçamento foi reprovado pela escola ou CRE serão exibidos aqui com a justificativa.'}
             </p>
           </div>
         )}
 
-        {activeWorkingTickets.map((ticket) => (
+        {/* LISTAGEM DOS CHAMADOS DA ABA SELECIONADA */}
+        {(techTab === 'ativos' ? inProgressTickets : techTab === 'aguardando' ? waitingTickets : techTab === 'concluidos' ? completedTickets : cancelledTickets).map((ticket) => (
           <div
             key={ticket.id}
             className="bg-white rounded-3xl p-5 shadow-lg border border-slate-200 space-y-4"
@@ -418,7 +545,11 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
                     ? 'bg-purple-100 text-purple-800'
                     : ticket.status === 'aguardando_orcamento'
                     ? 'bg-amber-100 text-amber-800'
-                    : 'bg-emerald-100 text-emerald-800'
+                    : ticket.status === 'concluido'
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : ticket.status === 'cancelado'
+                    ? 'bg-rose-100 text-rose-800'
+                    : 'bg-slate-100 text-slate-800'
                 }`}
               >
                 {ticket.status.replace('_', ' ')}
@@ -432,13 +563,53 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
               </div>
               <div className="flex items-center gap-1.5 text-[11px]">
                 <MapPin size={13} className="text-slate-400" />
-                {ticket.school_address}
+                {ticket.school_address} ({ticket.cre_name})
               </div>
               <div className="flex items-center gap-1.5 text-[11px]">
                 <Phone size={13} className="text-slate-400" />
                 {ticket.requester_name}: {ticket.requester_phone}
               </div>
             </div>
+
+            {/* BOTÃO PARA VISUALIZAR A LINHA DO TEMPO COMPLETA DESTE CHAMADO */}
+            <button
+              type="button"
+              onClick={() => setTimelineTicket(ticket)}
+              className="w-full py-2 bg-slate-50 hover:bg-blue-50 hover:text-blue-700 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs"
+            >
+              <Clock size={14} className="text-blue-600" />
+              <span>Ver Andamento & Linha do Tempo</span>
+            </button>
+
+            {/* SE O CHAMADO FOI CANCELADO (ORÇAMENTO REPROVADO), EXIBE O PARECER */}
+            {ticket.status === 'cancelado' && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-900 space-y-1">
+                <div className="font-bold flex items-center gap-1.5 text-rose-800">
+                  <XCircle size={15} /> Chamado Encerrado / Orçamento Reprovado
+                </div>
+                <p className="text-[11px] text-rose-700">
+                  {ticket.quote?.decision_reason
+                    ? `Motivo: "${ticket.quote.decision_reason}" (por ${ticket.quote.decision_by_name || 'Gestão da CRE/Escola'})`
+                    : 'O orçamento não foi autorizado pela gestão. Equipamento liberado sem custos.'}
+                </p>
+              </div>
+            )}
+
+            {/* SE O CHAMADO JÁ FOI CONCLUÍDO, EXIBE O RESUMO DO LAUDO */}
+            {ticket.status === 'concluido' && ticket.completion && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-900 space-y-1.5">
+                <div className="font-bold flex items-center gap-1.5 text-emerald-800">
+                  <CheckCircle2 size={15} /> Atendimento Concluído com Sucesso
+                </div>
+                <p className="text-[11.5px] text-emerald-800">
+                  {ticket.completion.service_summary}
+                </p>
+                <div className="text-[10.5px] text-emerald-700 flex justify-between items-center pt-1 border-t border-emerald-200">
+                  <span>Assinado por: <strong>{ticket.completion.school_representative_name}</strong></span>
+                  <span>{new Date(ticket.completion.completed_at).toLocaleDateString('pt-BR')}</span>
+                </div>
+              </div>
+            )}
 
             {/* AÇÃO RÁPIDA: CONTATO DIRETO VIA WHATSAPP COM O SOLICITANTE */}
             <div className="flex gap-2">
@@ -960,6 +1131,187 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
                 className="py-2.5 px-4 bg-slate-100 text-slate-700 text-xs font-semibold rounded-xl"
               >
                 Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE ANDAMENTO & LINHA DO TEMPO COMPLETA DO CHAMADO */}
+      {timelineTicket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div>
+                <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                  {timelineTicket.protocol}
+                </span>
+                <h4 className="font-extrabold text-sm text-slate-900 mt-1">
+                  Linha do Tempo de Atendimento
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTimelineTicket(null)}
+                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Resumo da Escola */}
+            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-700 space-y-1">
+              <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                <Building2 size={15} className="text-blue-600" />
+                {timelineTicket.school_name} (CRE {timelineTicket.cre_name})
+              </div>
+              <p className="text-[11px] text-slate-500">
+                <strong>Defeito:</strong> {timelineTicket.title}
+              </p>
+            </div>
+
+            {/* LINHA DO TEMPO VERTICAL COM OS 5 MARCOS DO CHAMADO */}
+            <div className="space-y-4 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-slate-200 pt-2">
+              {/* Marco 1: Abertura */}
+              <div className="relative flex items-start gap-3 pl-1">
+                <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 z-10 text-[10px] font-bold shadow">
+                  1
+                </div>
+                <div className="flex-1 bg-white p-3 rounded-xl border border-slate-200 text-xs">
+                  <div className="flex items-center justify-between font-bold text-slate-800">
+                    <span>Abertura pela Unidade Escolar</span>
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      {new Date(timelineTicket.created_at).toLocaleString('pt-BR')}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 mt-1">
+                    Solicitante: <strong>{timelineTicket.requester_name}</strong> ({timelineTicket.requester_role}) • WhatsApp: {timelineTicket.requester_phone}
+                  </p>
+                </div>
+              </div>
+
+              {/* Marco 2: Despacho e Aceite */}
+              <div className="relative flex items-start gap-3 pl-1">
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 z-10 text-[10px] font-bold shadow ${
+                  timelineTicket.assigned_technician_id ? 'bg-emerald-600 text-white' : 'bg-slate-300 text-slate-600'
+                }`}>
+                  2
+                </div>
+                <div className="flex-1 bg-white p-3 rounded-xl border border-slate-200 text-xs">
+                  <div className="flex items-center justify-between font-bold text-slate-800">
+                    <span>Atribuição & Aceite do Técnico</span>
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      {timelineTicket.updated_at ? new Date(timelineTicket.updated_at).toLocaleTimeString('pt-BR') : ''}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 mt-1">
+                    Técnico: <strong>{timelineTicket.assigned_technician_name || 'Aguardando despacho'}</strong>
+                  </p>
+                </div>
+              </div>
+
+              {/* Marco 3: Chegada e Check-in GPS */}
+              <div className="relative flex items-start gap-3 pl-1">
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 z-10 text-[10px] font-bold shadow ${
+                  timelineTicket.arrived_at ? 'bg-emerald-600 text-white' : 'bg-slate-300 text-slate-600'
+                }`}>
+                  3
+                </div>
+                <div className="flex-1 bg-white p-3 rounded-xl border border-slate-200 text-xs">
+                  <div className="flex items-center justify-between font-bold text-slate-800">
+                    <span>Check-in Presencial GPS na Escola</span>
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      {timelineTicket.arrived_at ? new Date(timelineTicket.arrived_at).toLocaleString('pt-BR') : 'Pendente'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 mt-1">
+                    {timelineTicket.arrived_at
+                      ? 'Localização geográfica validada dentro do perímetro oficial da escola.'
+                      : 'Técnico ainda não efetuou o check-in presencial no local.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Marco 4: Diagnóstico & Orçamento */}
+              {timelineTicket.quote && (
+                <div className="relative flex items-start gap-3 pl-1">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 z-10 text-[10px] font-bold shadow ${
+                    timelineTicket.quote.status === 'aprovado'
+                      ? 'bg-emerald-600 text-white'
+                      : timelineTicket.quote.status === 'rejeitado'
+                      ? 'bg-rose-600 text-white'
+                      : 'bg-amber-500 text-white'
+                  }`}>
+                    4
+                  </div>
+                  <div className="flex-1 bg-white p-3 rounded-xl border border-slate-200 text-xs">
+                    <div className="flex items-center justify-between font-bold text-slate-800">
+                      <span>Orçamento de Peças & Serviços</span>
+                      <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                        timelineTicket.quote.status === 'aprovado'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : timelineTicket.quote.status === 'rejeitado'
+                          ? 'bg-rose-100 text-rose-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {timelineTicket.quote.status}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 mt-1">
+                      Total: <strong>R$ {timelineTicket.quote.total_amount.toFixed(2)}</strong> ({timelineTicket.quote.items.length} itens)
+                    </p>
+                    {timelineTicket.quote.decision_reason && (
+                      <p className="text-[11px] text-rose-600 mt-1">
+                        Parecer do Gestor: "{timelineTicket.quote.decision_reason}"
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Marco 5: Conclusão & Assinatura */}
+              <div className="relative flex items-start gap-3 pl-1">
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 z-10 text-[10px] font-bold shadow ${
+                  timelineTicket.status === 'concluido' ? 'bg-emerald-600 text-white' : 'bg-slate-300 text-slate-600'
+                }`}>
+                  5
+                </div>
+                <div className="flex-1 bg-white p-3 rounded-xl border border-slate-200 text-xs">
+                  <div className="flex items-center justify-between font-bold text-slate-800">
+                    <span>Encerramento & Assinatura Digital</span>
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      {timelineTicket.resolved_at ? new Date(timelineTicket.resolved_at).toLocaleString('pt-BR') : 'Em andamento'}
+                    </span>
+                  </div>
+                  {timelineTicket.completion ? (
+                    <div className="text-[11px] text-slate-600 mt-1 space-y-1">
+                      <p>Gestor que Aprovou: <strong>{timelineTicket.completion.school_representative_name}</strong> ({timelineTicket.completion.school_representative_doc})</p>
+                      <p className="text-emerald-700 font-semibold">Assinatura digital colhida e arquivada.</p>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-400 mt-1">Aguardando execução e coleta de assinatura do diretor.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2 border-t">
+              <button
+                type="button"
+                onClick={() => {
+                  onViewOS(timelineTicket);
+                  setTimelineTicket(null);
+                }}
+                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors shadow flex items-center justify-center gap-1.5"
+              >
+                <Eye size={14} /> Abrir Ordem de Serviço Oficial
+              </button>
+              <button
+                type="button"
+                onClick={() => setTimelineTicket(null)}
+                className="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl"
+              >
+                Fechar
               </button>
             </div>
           </div>

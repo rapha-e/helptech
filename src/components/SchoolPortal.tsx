@@ -66,17 +66,15 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
   const [activeTab, setActiveTab] = useState<'abrir' | 'rastrear'>('abrir');
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
-  // Seleção de CRE (Coordenação Regional de Ensino)
-  const [selectedCreId, setSelectedCreId] = useState<string>(() => {
-    return regions[0]?.id || 'cre-braz';
-  });
+  // Seleção de CRE (Coordenação Regional de Ensino) - inicia vazia para obrigar seleção
+  const [selectedCreId, setSelectedCreId] = useState<string>('');
 
   // Escolas filtradas exclusivamente pela CRE selecionada
-  const creSchools = schools.filter((s) => s.cre_id === selectedCreId);
+  const creSchools = selectedCreId ? schools.filter((s) => s.cre_id === selectedCreId) : [];
 
   // Formulário
   const [formData, setFormData] = useState<TicketSubmissionData>({
-    school_id: creSchools[0]?.id || schools[0]?.id || '',
+    school_id: '',
     requester_name: '',
     requester_role: 'Diretor(a) Escolar',
     requester_phone: '',
@@ -112,43 +110,44 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
   });
   const [selectedTrackedTicket, setSelectedTrackedTicket] = useState<Ticket | null>(null);
 
-  // Atualiza escola padrão quando a CRE muda
+  // Atualiza escola quando a CRE muda (mantém escola limpa para seleção)
   const handleCreChange = (newCreId: string) => {
     setSelectedCreId(newCreId);
     setSchoolSearch('');
-    const newCreSchools = schools.filter((s) => s.cre_id === newCreId);
-    if (newCreSchools.length > 0) {
-      setFormData((prev) => ({ ...prev, school_id: newCreSchools[0].id }));
-    } else {
-      setFormData((prev) => ({ ...prev, school_id: '' }));
-    }
+    setFormData((prev) => ({ ...prev, school_id: '' }));
   };
 
-  // Recupera rascunho salvo do localStorage ao montar
+  // Recupera rascunho salvo do localStorage ao montar (garante que CRE e escola NÃO venham pré-selecionadas)
   useEffect(() => {
     try {
       const savedDraft = localStorage.getItem(DRAFT_KEY);
       if (savedDraft) {
         const parsed = JSON.parse(savedDraft);
-        setFormData((prev) => ({ ...prev, ...parsed }));
-        // Se o rascunho tinha uma escola, ajusta a CRE correspondente
-        if (parsed.school_id) {
-          const matchSchool = schools.find((s) => s.id === parsed.school_id);
-          if (matchSchool) {
-            setSelectedCreId(matchSchool.cre_id);
-          }
-        }
+        setFormData((prev) => ({
+          ...prev,
+          requester_name: parsed.requester_name || '',
+          requester_role: parsed.requester_role || 'Diretor(a) Escolar',
+          requester_phone: parsed.requester_phone || '',
+          category_id: parsed.category_id || categories[0]?.id || '',
+          title: parsed.title || '',
+          description: parsed.description || '',
+          equipment_patrimony: parsed.equipment_patrimony || '',
+          urgency_level: parsed.urgency_level || 'media',
+          // Nunca pré-seleciona escola automaticamente: o usuário deve sempre escolher a CRE primeiro
+          school_id: ''
+        }));
+        setSelectedCreId('');
       }
-    } catch (e) {
+    } catch {
       console.warn('Rascunho não encontrado');
     }
-  }, [schools]);
+  }, [categories]);
 
   // Salva rascunho continuamente
   useEffect(() => {
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(formData));
-    } catch (e) {
+    } catch {
       console.warn('Erro ao salvar rascunho');
     }
   }, [formData]);
@@ -192,6 +191,7 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
 
   const validateStep1 = () => {
     const errors: Record<string, string> = {};
+    if (!selectedCreId) errors.cre = 'Selecione a Coordenação Regional (CRE)';
     if (!formData.school_id) errors.school_id = 'Selecione a Unidade Escolar da CRE';
     if (!formData.requester_name.trim()) errors.requester_name = 'Nome do solicitante é obrigatório';
     if (!formData.requester_phone.trim()) errors.requester_phone = 'Telefone WhatsApp é obrigatório';
@@ -240,7 +240,7 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
       localStorage.setItem(MY_TICKETS_KEY, JSON.stringify(updated));
       localStorage.setItem(MY_PHONE_KEY, formData.requester_phone);
       setSearchPhoneOrProtocol(formData.requester_phone);
-    } catch (e) {
+    } catch {
       console.warn('Erro ao salvar chamado do usuário');
     }
 
@@ -282,7 +282,9 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
         setMyTicketIds(updated);
         try {
           localStorage.setItem(MY_TICKETS_KEY, JSON.stringify(updated));
-        } catch (e) {}
+        } catch {
+          // Fallback silencioso de storage
+        }
       }
     }
   };
@@ -377,6 +379,16 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                 </div>
               </div>
 
+              {/* Dica de Acompanhamento Contínuo */}
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-left text-xs text-blue-900 space-y-1">
+                <div className="font-bold flex items-center gap-1.5 text-blue-800">
+                  <Sparkles size={14} className="text-blue-600" /> Como acompanhar esta solicitação:
+                </div>
+                <p className="text-[11.5px] text-blue-800/90 leading-relaxed">
+                  Este chamado já foi salvo automaticamente na sua aba <strong>"Rastrear Chamados"</strong>. Você também pode consultá-lo a qualquer momento digitando o número do protocolo <strong>{createdSuccessTicket.protocol}</strong> ou o WhatsApp <strong>{createdSuccessTicket.requester_phone}</strong>.
+                </p>
+              </div>
+
               <div className="flex flex-col sm:flex-row gap-2.5">
                 <button
                   onClick={() => {
@@ -386,15 +398,36 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                   }}
                   className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-md transition-colors flex items-center justify-center gap-1.5"
                 >
-                  <Search size={14} /> Acompanhar Este Chamado
+                  <Search size={14} /> Acompanhar Linha do Tempo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cleanPhone = createdSuccessTicket.requester_phone.replace(/\D/g, '');
+                    const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+                    const text = encodeURIComponent(
+                      `📋 *Comprovante de Chamado HelpTech*\n` +
+                      `*Protocolo:* ${createdSuccessTicket.protocol}\n` +
+                      `*Escola:* ${createdSuccessTicket.school_name} (CRE ${createdSuccessTicket.cre_name})\n` +
+                      `*Defeito:* ${createdSuccessTicket.title}\n` +
+                      `*Status:* Em processamento de despacho\n` +
+                      `*Token:* ${createdSuccessTicket.tracking_token}\n\n` +
+                      `Guarde este comprovante para acompanhar o atendimento da sua unidade.`
+                    );
+                    window.open(`https://wa.me/${fullPhone}?text=${text}`, '_blank');
+                  }}
+                  className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shadow"
+                >
+                  <Phone size={14} /> Salvar no WhatsApp
                 </button>
                 <button
                   onClick={() => {
                     setCreatedSuccessTicket(null);
                     setStep(1);
+                    setSelectedCreId('');
                     setAttachments([]);
                     setFormData({
-                      school_id: creSchools[0]?.id || '',
+                      school_id: '',
                       requester_name: '',
                       requester_role: 'Diretor(a) Escolar',
                       requester_phone: '',
@@ -494,15 +527,22 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                           onChange={(e) => handleCreChange(e.target.value)}
                           className="w-full p-2.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-800 shadow-sm"
                         >
+                          <option value="" disabled>
+                            Selecione a CRE
+                          </option>
                           {regions.map((reg) => (
                             <option key={reg.id} value={reg.id}>
                               CRE {reg.name}
                             </option>
                           ))}
                         </select>
-                        <span className="text-[10px] text-slate-400 mt-1 block">
-                          Selecione primeiro a regional para carregar as escolas correspondentes.
-                        </span>
+                        {formErrors.cre ? (
+                          <p className="text-[11px] text-rose-500 mt-1">{formErrors.cre}</p>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 mt-1 block">
+                            Selecione primeiro a regional para carregar as escolas correspondentes.
+                          </span>
+                        )}
                       </div>
 
                       {/* CAMPO 2: SELEÇÃO DA UNIDADE ESCOLAR (FILTRADA PELA CRE) */}
@@ -510,7 +550,9 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                         <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5 flex items-center justify-between">
                           <span>2. Unidade Escolar da CRE Selecionada *</span>
                           <span className="text-[10px] text-emerald-600 font-semibold">
-                            {filteredSchoolsInCre.length} escola(s) nesta CRE
+                            {selectedCreId
+                              ? `${filteredSchoolsInCre.length} escola(s) nesta CRE`
+                              : 'Aguardando seleção da CRE'}
                           </span>
                         </label>
 
@@ -524,8 +566,13 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                             type="text"
                             value={schoolSearch}
                             onChange={(e) => setSchoolSearch(e.target.value)}
-                            placeholder="Buscar por nome da escola, endereço ou CEP..."
-                            className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                            disabled={!selectedCreId}
+                            placeholder={
+                              !selectedCreId
+                                ? 'Selecione a CRE primeiro...'
+                                : 'Buscar por nome da escola, endereço ou CEP...'
+                            }
+                            className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
                           />
                         </div>
 
@@ -534,8 +581,14 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                           onChange={(e) =>
                             setFormData({ ...formData, school_id: e.target.value })
                           }
-                          className="w-full p-2.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-slate-900 shadow-sm"
+                          disabled={!selectedCreId}
+                          className="w-full p-2.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-slate-900 shadow-sm disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
                         >
+                          <option value="" disabled>
+                            {!selectedCreId
+                              ? 'Selecione primeiro a CRE acima'
+                              : 'Selecione a Unidade Escolar'}
+                          </option>
                           {filteredSchoolsInCre.map((sch) => (
                             <option key={sch.id} value={sch.id}>
                               {sch.name}

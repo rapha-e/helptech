@@ -1,4 +1,5 @@
 import type { Technician, Ticket } from '../data/seedData';
+import { ACTIVE_WORKLOAD_STATUSES } from './stateMachine';
 
 /**
  * Calcula a distância em quilômetros entre duas coordenadas geográficas
@@ -41,8 +42,6 @@ export function getBestCandidateTechnician(
   tickets: Ticket[],
   excludedTechIds: string[] = []
 ): CandidateTechnicianResult | null {
-  const activeStatuses = ['despachado', 'em_deslocamento', 'em_atendimento', 'aguardando_peca'];
-
   const candidates: CandidateTechnicianResult[] = [];
 
   for (const tech of technicians) {
@@ -53,9 +52,9 @@ export function getBestCandidateTechnician(
       continue;
     }
 
-    // Calcula chamados ativos em atendimento pelo técnico
+    // Calcula chamados ativos em atendimento pelo técnico usando os 7 status canônicos
     const activeLoad = tickets.filter(
-      (t) => t.assigned_technician_id === tech.id && activeStatuses.includes(t.status)
+      (t) => t.assigned_technician_id === tech.id && ACTIVE_WORKLOAD_STATUSES.includes(t.status)
     ).length;
 
     if (activeLoad >= tech.max_active_tickets) {
@@ -78,12 +77,15 @@ export function getBestCandidateTechnician(
     return null;
   }
 
-  // Ordena por menor distância e, em caso de empate, menor carga ativa
+  // Ordenação: 1º menor distância; 2º menor carga ativa; 3º estabilidade alfabética
   candidates.sort((a, b) => {
-    if (a.distanceKm !== b.distanceKm) {
+    if (Math.abs(a.distanceKm - b.distanceKm) > 0.05) {
       return a.distanceKm - b.distanceKm;
     }
-    return a.activeLoad - b.activeLoad;
+    if (a.activeLoad !== b.activeLoad) {
+      return a.activeLoad - b.activeLoad;
+    }
+    return a.technician.name.localeCompare(b.technician.name);
   });
 
   return candidates[0];
@@ -156,19 +158,39 @@ export async function compressImageToWebP(
 }
 
 /**
- * Gera um protocolo oficial sequencial no formato OS-YYYY-XXXXX
+ * Gera um protocolo oficial sequencial no formato OS-YYYY-XXXXX com garantia de unicidade
  */
-export function generateTicketProtocol(): string {
+export function generateTicketProtocol(existingProtocols?: string[]): string {
   const year = new Date().getFullYear();
-  const randomNum = Math.floor(10000 + Math.random() * 90000);
-  return `OS-${year}-${randomNum}`;
+  let candidate = '';
+  let attempts = 0;
+  do {
+    const randomNum = Math.floor(10000 + Math.random() * 90000);
+    candidate = `OS-${year}-${randomNum}`;
+    attempts++;
+  } while (existingProtocols && existingProtocols.includes(candidate) && attempts < 10);
+
+  if (existingProtocols && existingProtocols.includes(candidate)) {
+    const nanoSuffix = (Date.now() % 10000).toString().padStart(4, '0');
+    candidate = `OS-${year}-${nanoSuffix}`;
+  }
+  return candidate;
 }
 
 /**
- * Gera um token seguro de rastreamento de 64 caracteres hexadecimais
+ * Gera um token seguro de rastreamento com alta entropia criptográfica (192 bits / CSPRNG)
+ * Retorna prefixo 'tk_' seguido de 48 caracteres hexadecimais (total 51 caracteres)
  */
 export function generateTrackingToken(): string {
-  const array = new Uint8Array(16);
-  window.crypto.getRandomValues(array);
+  const cryptoObj = typeof globalThis !== 'undefined' && globalThis.crypto 
+    ? globalThis.crypto 
+    : (typeof window !== 'undefined' ? window.crypto : null);
+  
+  if (!cryptoObj || typeof cryptoObj.getRandomValues !== 'function') {
+    throw new Error('CSPRNG indisponível para geração segura de token de acompanhamento');
+  }
+
+  const array = new Uint8Array(24); // 24 bytes = 192 bits de entropia criptográfica
+  cryptoObj.getRandomValues(array);
   return 'tk_' + Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
