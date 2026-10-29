@@ -199,7 +199,7 @@ export function useAppStore() {
     refreshData();
   }, [refreshData]);
 
-  // Sincronização em tempo real via Supabase Realtime (postgres_changes)
+  // Sincronização granular em tempo real (WS4 / F-08: Realtime incremental em memória)
   useEffect(() => {
     if (!isSupabaseConfigured) return;
 
@@ -209,22 +209,126 @@ export function useAppStore() {
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'tickets' },
-          () => {
-            refreshData();
-          }
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'ticket_quotes' },
-          () => {
-            refreshData();
+          (payload: any) => {
+            const { eventType, new: newRow, old: oldRow } = payload;
+
+            if (eventType === 'UPDATE' && newRow?.id) {
+              setTickets((prev) =>
+                prev.map((t) => {
+                  if (t.id === newRow.id) {
+                    return {
+                      ...t,
+                      status: newRow.status || t.status,
+                      assigned_technician_id:
+                        newRow.assigned_technician_id !== undefined
+                          ? newRow.assigned_technician_id
+                          : t.assigned_technician_id,
+                      scheduled_visit_at:
+                        newRow.scheduled_visit_date || newRow.scheduled_visit_at || t.scheduled_visit_at,
+                      scheduled_visit_notes: newRow.scheduled_visit_notes ?? t.scheduled_visit_notes,
+                      pending_part_notes: newRow.pending_part_notes ?? t.pending_part_notes,
+                      third_party_notes: newRow.third_party_notes ?? t.third_party_notes,
+                      arrived_at: newRow.arrived_at || t.arrived_at,
+                      resolved_at: newRow.resolved_at || t.resolved_at,
+                      updated_at: newRow.updated_at || new Date().toISOString()
+                    };
+                  }
+                  return t;
+                })
+              );
+            } else if (eventType === 'INSERT' && newRow?.id) {
+              setTickets((prev) => {
+                if (prev.some((t) => t.id === newRow.id || t.protocol === newRow.protocol)) {
+                  return prev.map((t) => (t.id === newRow.id ? { ...t, ...newRow } : t));
+                }
+                const sch = schools.find((s) => s.id === newRow.school_id);
+                const cat = categories.find((c) => c.id === newRow.category_id);
+                const mappedTicket: Ticket = {
+                  id: newRow.id,
+                  protocol: newRow.protocol,
+                  tracking_token: newRow.tracking_token,
+                  school_id: newRow.school_id,
+                  school_name: sch?.name || 'Unidade Escolar',
+                  school_address: sch?.address || '',
+                  cre_name: sch?.cre_name || '',
+                  category_id: newRow.category_id,
+                  category_name: cat?.name || 'Geral',
+                  requester_name: newRow.requester_name,
+                  requester_role: newRow.requester_role,
+                  requester_phone: newRow.requester_phone,
+                  title: newRow.title,
+                  description: newRow.description,
+                  equipment_patrimony: newRow.equipment_patrimony,
+                  urgency_level: newRow.urgency_level,
+                  status: newRow.status,
+                  assigned_technician_id: newRow.assigned_technician_id,
+                  created_at: newRow.created_at,
+                  updated_at: newRow.updated_at,
+                  dispatch_attempts: newRow.dispatch_attempts || 1,
+                  dispatch_logs: [],
+                  attachments: []
+                };
+                return [mappedTicket, ...prev];
+              });
+            } else if (eventType === 'DELETE' && oldRow?.id) {
+              setTickets((prev) => prev.filter((t) => t.id !== oldRow.id));
+            } else {
+              refreshData();
+            }
           }
         )
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'technicians' },
-          () => {
-            refreshData();
+          (payload: any) => {
+            const { eventType, new: newRow } = payload;
+            if (eventType === 'UPDATE' && newRow?.id) {
+              setTechnicians((prev) =>
+                prev.map((tc) => (tc.id === newRow.id ? { ...tc, ...newRow } : tc))
+              );
+            } else {
+              fetchRemoteTechnicians().then((res) => {
+                if (res.data) setTechnicians(res.data);
+              });
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'ticket_quotes' },
+          (payload: any) => {
+            const { new: newQuote } = payload;
+            if (newQuote?.ticket_id) {
+              const tech = technicians.find((tc) => tc.id === newQuote.technician_id);
+              setTickets((prev) =>
+                prev.map((t) => {
+                  if (t.id === newQuote.ticket_id) {
+                    return {
+                      ...t,
+                      quote: {
+                        id: newQuote.id,
+                        ticket_id: newQuote.ticket_id,
+                        technician_id: newQuote.technician_id,
+                        technician_name: tech?.name || 'Técnico Responsável',
+                        total_amount: Number(newQuote.total_amount) || 0,
+                        technical_diagnosis: newQuote.justification || newQuote.technical_diagnosis || '',
+                        status: newQuote.status,
+                        created_at: newQuote.created_at,
+                        items: (newQuote.parts_list || []).map((p: any, idx: number) => ({
+                          id: p.id || `quote-item-${idx}`,
+                          quote_id: newQuote.id,
+                          item_name: p.item_name || p.name || 'Peça / Serviço',
+                          quantity: Number(p.quantity) || 1,
+                          unit_price: Number(p.unit_price) || 0,
+                          subtotal: Number(p.subtotal) || (Number(p.quantity) || 1) * (Number(p.unit_price) || 0)
+                        }))
+                      }
+                    };
+                  }
+                  return t;
+                })
+              );
+            }
           }
         )
         .subscribe();
@@ -235,7 +339,7 @@ export function useAppStore() {
     } catch (err) {
       console.warn('Falha ao registrar canal de sincronização Realtime:', err);
     }
-  }, [refreshData]);
+  }, [refreshData, schools, categories, technicians]);
 
   // Persistência local imediata para cache / offline
   useEffect(() => {
