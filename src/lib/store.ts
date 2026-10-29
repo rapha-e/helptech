@@ -22,7 +22,7 @@ import {
   calculateDistanceKm
 } from './geoEngine';
 import type { TicketSubmissionData, QuoteSubmissionData, TicketCompletionData } from './schemas';
-import { isSupabaseConfigured } from './supabaseClient';
+import { isSupabaseConfigured, supabase } from './supabaseClient';
 import {
   fetchRemoteTickets,
   createRemoteTicket,
@@ -172,6 +172,44 @@ export function useAppStore() {
 
   useEffect(() => {
     refreshData();
+  }, [refreshData]);
+
+  // Sincronização em tempo real via Supabase Realtime (postgres_changes)
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    try {
+      const channel = supabase
+        .channel('public-db-realtime-sync')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'tickets' },
+          () => {
+            refreshData();
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'ticket_quotes' },
+          () => {
+            refreshData();
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'technicians' },
+          () => {
+            refreshData();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } catch (err) {
+      console.warn('Falha ao registrar canal de sincronização Realtime:', err);
+    }
   }, [refreshData]);
 
   // Persistência local imediata para cache / offline

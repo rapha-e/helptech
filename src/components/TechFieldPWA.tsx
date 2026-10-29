@@ -25,9 +25,21 @@ import {
   MessageSquare,
   Wifi,
   WifiOff,
-  RefreshCw
+  RefreshCw,
+  QrCode
 } from 'lucide-react';
+import { BarcodeScannerModal } from './BarcodeScannerModal';
 import { useOfflineStatus } from '../lib/offlineQueue';
+
+export const triggerHapticFeedback = (pattern: number | number[] = [80]) => {
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    try {
+      navigator.vibrate(pattern);
+    } catch {
+      // Ignora falhas em dispositivos ou navegadores sem suporte
+    }
+  }
+};
 
 interface TechFieldPWAProps {
   technicians: Technician[];
@@ -88,6 +100,8 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
   const [quoteItems, setQuoteItems] = useState<
     { item_type: 'peca' | 'servico'; item_name: string; quantity: number; unit_price: number }[]
   >([{ item_type: 'peca', item_name: '', quantity: 1, unit_price: 0 }]);
+  const [showScanner, setShowScanner] = useState(false);
+  const [scanTargetQuoteIndex, setScanTargetQuoteIndex] = useState<number | null>(null);
 
   // Conclusão
   const [completionTicketId, setCompletionTicketId] = useState<string | null>(null);
@@ -170,9 +184,17 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const handleAcceptTicket = (ticketId: string) => {
+    triggerHapticFeedback([80, 40, 80]);
+    onAcceptTicket(ticketId, selectedTechId);
+  };
+
   const handlePerformCheckIn = (ticket: Ticket) => {
     const school = schools.find((s) => s.id === ticket.school_id);
     if (!school || !currentTech) return;
+
+    // Feedback háptico ao registrar ponto/check-in
+    triggerHapticFeedback(120);
 
     // Simula coordenadas próximas da escola (com leve variação para teste realista)
     const simulatedLat = school.latitude + 0.0008;
@@ -202,6 +224,8 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
     const validItems = quoteItems.filter((it) => it.item_name.trim().length > 0);
     if (validItems.length === 0) return;
 
+    triggerHapticFeedback([80, 50, 80]);
+
     onSubmitQuote(ticketId, currentTech.id, {
       technical_diagnosis: quoteDiagnosis,
       items: validItems
@@ -223,6 +247,9 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
       alert('Preencha o resumo, os dados do gestor e colete a assinatura na tela.');
       return;
     }
+
+    // Feedback háptico comemorativo na conclusão formal da OS
+    triggerHapticFeedback([100, 50, 100, 50, 200]);
 
     onCompleteTicket(ticketId, currentTech.id, {
       service_summary: serviceSummary,
@@ -371,7 +398,7 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
 
           <div className="flex gap-2 mt-4">
             <button
-              onClick={() => onAcceptTicket(pendingDispatchTicket.id, selectedTechId)}
+              onClick={() => handleAcceptTicket(pendingDispatchTicket.id)}
               className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-1.5"
             >
               <CheckCircle2 size={16} /> Aceitar Deslocamento
@@ -652,7 +679,7 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
                     <p className="text-[11px] text-purple-700">Obs: {ticket.scheduled_visit_notes}</p>
                   )}
                   <button
-                    onClick={() => onAcceptTicket(ticket.id, selectedTechId)}
+                    onClick={() => handleAcceptTicket(ticket.id)}
                     className="w-full mt-2 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
                   >
                     <Navigation size={14} /> Iniciar Deslocamento Agora
@@ -842,9 +869,20 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
                             updated[idx].item_name = e.target.value;
                             setQuoteItems(updated);
                           }}
-                          placeholder="Descrição do item"
+                          placeholder="Descrição do item ou peça"
                           className="flex-1 text-[11px] p-1 border rounded-lg"
                         />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setScanTargetQuoteIndex(idx);
+                            setShowScanner(true);
+                          }}
+                          className="p-1 text-slate-500 hover:text-blue-600 border border-slate-200 rounded-lg hover:bg-blue-50 transition-colors"
+                          title="Escanear código de barras ou serial da peça"
+                        >
+                          <QrCode size={14} />
+                        </button>
                         {quoteItems.length > 1 && (
                           <button
                             type="button"
@@ -1317,6 +1355,25 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
           </div>
         </div>
       )}
+
+      {/* MODAL DE LEITURA DE CÓDIGO DE BARRAS / SERIAL DE PEÇA */}
+      <BarcodeScannerModal
+        isOpen={showScanner}
+        onClose={() => {
+          setShowScanner(false);
+          setScanTargetQuoteIndex(null);
+        }}
+        onScanSuccess={(detectedCode) => {
+          if (scanTargetQuoteIndex !== null && quoteItems[scanTargetQuoteIndex]) {
+            const updated = [...quoteItems];
+            updated[scanTargetQuoteIndex].item_name = detectedCode;
+            setQuoteItems(updated);
+          }
+          setShowScanner(false);
+          setScanTargetQuoteIndex(null);
+        }}
+        title="Escanear Código de Barras / Serial de Peça"
+      />
     </div>
   );
 };

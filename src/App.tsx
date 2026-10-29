@@ -1,11 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { useAppStore } from './lib/store';
 import { env } from './lib/env';
-import { SchoolPortal } from './components/SchoolPortal';
-import { TechFieldPWA } from './components/TechFieldPWA';
-import { CentralAdminDashboard } from './components/CentralAdminDashboard';
-import { TicketOSModal } from './components/TicketOSModal';
-import { AuthModal } from './components/AuthModal';
 import type { Ticket } from './data/seedData';
 import type { AuthUserProfile, UserRole } from './lib/authService';
 import { getStoredSession } from './lib/authService';
@@ -22,6 +17,35 @@ import {
   AlertTriangle,
   LogIn
 } from 'lucide-react';
+
+// Code-splitting via React.lazy para máxima performance em conexões móveis e carregamento instantâneo
+const SchoolPortal = lazy(() =>
+  import('./components/SchoolPortal').then((m) => ({ default: m.SchoolPortal }))
+);
+const TechFieldPWA = lazy(() =>
+  import('./components/TechFieldPWA').then((m) => ({ default: m.TechFieldPWA }))
+);
+const CentralAdminDashboard = lazy(() =>
+  import('./components/CentralAdminDashboard').then((m) => ({ default: m.CentralAdminDashboard }))
+);
+const TicketOSModal = lazy(() =>
+  import('./components/TicketOSModal').then((m) => ({ default: m.TicketOSModal }))
+);
+const AuthModal = lazy(() =>
+  import('./components/AuthModal').then((m) => ({ default: m.AuthModal }))
+);
+
+const ViewSkeletonFallback: React.FC = () => (
+  <div className="w-full py-16 flex flex-col items-center justify-center space-y-4 animate-pulse">
+    <div className="w-12 h-12 rounded-2xl bg-blue-100 flex items-center justify-center text-blue-600">
+      <RefreshCw size={24} className="animate-spin" />
+    </div>
+    <div className="text-center space-y-1.5">
+      <div className="h-4 w-44 bg-slate-200 rounded-md mx-auto" />
+      <div className="h-3 w-32 bg-slate-100 rounded-md mx-auto" />
+    </div>
+  </div>
+);
 
 export const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<AuthUserProfile | null>(() => {
@@ -252,7 +276,7 @@ export const App: React.FC = () => {
             </div>
           </div>
         ) : (
-          <>
+          <Suspense fallback={<ViewSkeletonFallback />}>
             {/* PERFIL 1: UNIDADES ESCOLARES */}
             {currentRole === 'ROLE_SCHOOL' && (
               <SchoolPortal
@@ -308,26 +332,28 @@ export const App: React.FC = () => {
                 onResetDatabase={resetDatabase}
               />
             )}
-          </>
+          </Suspense>
         )}
       </main>
 
       {/* MODAL DE ORDEM DE SERVIÇO OFICIAL SE SELECIONADA */}
-      {viewingOsTicket && (
-        <TicketOSModal
-          ticket={viewingOsTicket}
-          onClose={() => setViewingOsTicket(null)}
-        />
-      )}
+      <Suspense fallback={null}>
+        {viewingOsTicket && (
+          <TicketOSModal
+            ticket={viewingOsTicket}
+            onClose={() => setViewingOsTicket(null)}
+          />
+        )}
 
-      {/* MODAL DE AUTENTICAÇÃO */}
-      {showAuthModal && (
-        <AuthModal
-          currentUser={currentUser}
-          onUserChange={handleUserChange}
-          onClose={() => setShowAuthModal(false)}
-        />
-      )}
+        {/* MODAL DE AUTENTICAÇÃO */}
+        {showAuthModal && (
+          <AuthModal
+            currentUser={currentUser}
+            onUserChange={handleUserChange}
+            onClose={() => setShowAuthModal(false)}
+          />
+        )}
+      </Suspense>
 
       {/* FOOTER */}
       <footer className="bg-slate-900 border-t border-slate-800 text-slate-400 py-3 text-center text-[11px]">

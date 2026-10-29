@@ -25,8 +25,11 @@ import {
   Building2,
   MapPin,
   Phone,
-  Mail
+  Mail,
+  QrCode
 } from 'lucide-react';
+import { BarcodeScannerModal } from './BarcodeScannerModal';
+import { TicketJourneyTracker } from './TicketJourneyTracker';
 
 interface SchoolPortalProps {
   schools: School[];
@@ -92,6 +95,7 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
   const [isCompressing, setIsCompressing] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [createdSuccessTicket, setCreatedSuccessTicket] = useState<Ticket | null>(null);
+  const [showScanner, setShowScanner] = useState(false);
 
   // Rastreamento restrito aos chamados do usuário
   const [myTicketIds, setMyTicketIds] = useState<string[]>(() => {
@@ -788,9 +792,20 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Nº Patrimônio SEEDF (Opcional)
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-bold text-slate-700">
+                            Nº Patrimônio SEEDF (Opcional)
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setShowScanner(true)}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md transition-colors"
+                            title="Escanear etiqueta de patrimônio via câmera ou leitor"
+                          >
+                            <QrCode size={13} />
+                            Escanear Etiqueta
+                          </button>
+                        </div>
                         <input
                           type="text"
                           value={formData.equipment_patrimony}
@@ -1096,6 +1111,9 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                 </button>
               </div>
 
+              {/* JORNADA VISUAL DO ATENDIMENTO (STEPPER) */}
+              <TicketJourneyTracker ticket={selectedTrackedTicket} />
+
               {/* AVISO: VISITA TÉCNICA AGENDADA */}
               {selectedTrackedTicket.status === 'visita_agendada' && (
                 <div className="p-3.5 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900 space-y-1">
@@ -1284,6 +1302,17 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
           )}
         </div>
       )}
+
+      {/* MODAL DE LEITURA DE CÓDIGO DE BARRAS / QR CODE */}
+      <BarcodeScannerModal
+        isOpen={showScanner}
+        onClose={() => setShowScanner(false)}
+        onScanSuccess={(detectedCode) => {
+          setFormData((prev) => ({ ...prev, equipment_patrimony: detectedCode }));
+          setShowScanner(false);
+        }}
+        title="Escanear Etiqueta de Patrimônio SEEDF"
+      />
     </div>
   );
 };
