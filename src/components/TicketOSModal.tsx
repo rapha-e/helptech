@@ -197,7 +197,10 @@ export const TicketOSModal: React.FC<TicketOSModalProps> = ({ ticket, onClose })
                     <strong>Responsável:</strong> {ticket.completion.school_representative_name}
                   </div>
                   <div className="text-slate-600">
-                    <strong>Documento:</strong> {ticket.completion.school_representative_doc}
+                    <strong>Matrícula / Vínculo Institucional:</strong>{' '}
+                    {ticket.completion.school_representative_doc
+                      ? ticket.completion.school_representative_doc.replace(/(\d{3})\.\d{3}\.\d{3}-(\d{2})/, '$1.***.***-$2')
+                      : 'Homologado no ato da visita'}
                   </div>
                   <div className="text-slate-500 text-[11px] flex items-center gap-1">
                     <Calendar size={12} />

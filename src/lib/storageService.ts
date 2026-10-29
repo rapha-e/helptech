@@ -55,12 +55,13 @@ export async function uploadEvidenceFile(
         });
 
       if (!error && data) {
-        const { data: publicUrlData } = supabase.storage
+        // Gera URL assinada temporária com TTL de 15 minutos (900s) para conformidade total com LGPD (WS3 / F-06)
+        const { data: signedData } = await supabase.storage
           .from('ticket-attachments')
-          .getPublicUrl(remotePath);
+          .createSignedUrl(remotePath, 900);
 
         return {
-          file_url: publicUrlData.publicUrl,
+          file_url: signedData?.signedUrl || remotePath,
           file_name: finalFileName,
           file_size_bytes: finalSize,
           is_remote: true
@@ -85,4 +86,38 @@ export async function uploadEvidenceFile(
     reader.readAsDataURL(uploadBlob);
   });
 }
+
+/**
+ * Obtém uma nova URL assinada temporária (TTL padrão: 15 min / 900s) para visualização segura de anexo
+ */
+export async function getAttachmentSignedUrl(
+  pathOrUrl: string,
+  ttlSeconds: number = 900
+): Promise<string> {
+  if (!isSupabaseConfigured || !supabase) return pathOrUrl;
+
+  // Se já for data URL base64, retorna diretamente
+  if (pathOrUrl.startsWith('data:')) return pathOrUrl;
+
+  try {
+    // Extrai o caminho relativo dentro do bucket se for uma URL completa
+    let storagePath = pathOrUrl;
+    if (pathOrUrl.includes('/ticket-attachments/')) {
+      storagePath = pathOrUrl.split('/ticket-attachments/')[1].split('?')[0];
+    }
+
+    const { data, error } = await supabase.storage
+      .from('ticket-attachments')
+      .createSignedUrl(storagePath, ttlSeconds);
+
+    if (!error && data?.signedUrl) {
+      return data.signedUrl;
+    }
+  } catch (err) {
+    console.warn('Falha ao gerar URL assinada para anexo:', err);
+  }
+
+  return pathOrUrl;
+}
+
 

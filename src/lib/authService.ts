@@ -29,7 +29,13 @@ export async function fetchUserProfile(
   }
 
   try {
-    // 1. Verifica se é operador do sistema (system_users)
+    // 1. Prioriza a RPC transacional get_my_profile() no PostgreSQL (Servidor como Fonte de Verdade)
+    const { data: profileRpc, error: rpcErr } = await supabase.rpc('get_my_profile');
+    if (!rpcErr && profileRpc && profileRpc.role) {
+      return profileRpc as AuthUserProfile;
+    }
+
+    // 2. Fallback de verificação se é operador do sistema (system_users)
     const { data: sysUser, error: sysErr } = await supabase
       .from('system_users')
       .select('id, name, email, role, active')
