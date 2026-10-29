@@ -254,8 +254,11 @@ export function useAppStore() {
     saveStoredInventory(inventory);
   }, [inventory]);
 
-  // Checa periodicamente se há chamados despachados cujo timeout de 20 min expirou
+  // Checa periodicamente timeout de 20 min apenas quando offline / sem Supabase
+  // Em produção conectada, o timeout é gerenciado no servidor via pg_cron (F-03 / WS2)
   useEffect(() => {
+    if (isSupabaseConfigured) return;
+
     const interval = setInterval(() => {
       const now = new Date().getTime();
       let hasChanges = false;

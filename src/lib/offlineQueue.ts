@@ -16,6 +16,9 @@ export interface OfflineMutation<T = any> {
   id: string;
   action: OfflineActionType;
   ticketId: string;
+  expected_updated_at?: string; // D-05: Controle de versão para detecção de concorrência
+  conflictState?: 'NONE' | 'DETECTED' | 'RESOLVED';
+  conflictReason?: string;
   payload: T;
   actor: { name: string; role: string };
   createdAt: string;
@@ -23,6 +26,39 @@ export interface OfflineMutation<T = any> {
 }
 
 const OFFLINE_QUEUE_KEY = 'helptech_offline_mutations_v1';
+
+/**
+ * Valida a versão esperada com o estado do servidor (D-05)
+ * Se o chamado foi alterado no servidor enquanto o técnico estava sem sinal, sinaliza conflito
+ */
+export function checkMutationConflict(
+  mutation: OfflineMutation,
+  serverTicketUpdatedAt?: string,
+  serverTicketStatus?: string
+): { hasConflict: boolean; reason?: string } {
+  if (!mutation.expected_updated_at || !serverTicketUpdatedAt) {
+    return { hasConflict: false };
+  }
+
+  const clientTime = new Date(mutation.expected_updated_at).getTime();
+  const serverTime = new Date(serverTicketUpdatedAt).getTime();
+
+  if (serverTime > clientTime) {
+    if (serverTicketStatus === 'cancelado' || serverTicketStatus === 'concluido') {
+      return {
+        hasConflict: true,
+        reason: `Chamado foi finalizado (${serverTicketStatus}) remotamente pela Central durante o período offline.`
+      };
+    }
+
+    return {
+      hasConflict: true,
+      reason: `Alteração concorrente detectada (versão do servidor: ${serverTicketUpdatedAt}).`
+    };
+  }
+
+  return { hasConflict: false };
+}
 
 /**
  * Lê a fila de mutações offline armazenada no dispositivo do técnico

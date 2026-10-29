@@ -29,7 +29,13 @@ import {
   QrCode
 } from 'lucide-react';
 import { BarcodeScannerModal } from './BarcodeScannerModal';
-import { useOfflineStatus } from '../lib/offlineQueue';
+import { useOfflineStatus, flushOfflineQueue } from '../lib/offlineQueue';
+import {
+  acceptDispatchRemote,
+  refuseDispatchRemote,
+  checkInRemote,
+  completeTicketRemote
+} from '../lib/ticketService';
 
 export const triggerHapticFeedback = (pattern: number | number[] = [80]) => {
   if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
@@ -306,12 +312,38 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
               </div>
             </div>
             <button
-              onClick={() => {
+              onClick={async () => {
                 setIsFlushing(true);
-                setTimeout(() => {
-                  setIsFlushing(false);
+                try {
+                  await flushOfflineQueue(async (mutation) => {
+                    if (mutation.action === 'ACCEPT_TICKET') {
+                      await acceptDispatchRemote(mutation.ticketId, mutation.payload?.scheduledVisitDate);
+                      return true;
+                    }
+                    if (mutation.action === 'REFUSE_TICKET') {
+                      await refuseDispatchRemote(mutation.ticketId, mutation.payload?.reason || 'Recusa offline');
+                      return true;
+                    }
+                    if (mutation.action === 'CHECK_IN') {
+                      await checkInRemote(mutation.ticketId, mutation.payload?.lat, mutation.payload?.lng);
+                      return true;
+                    }
+                    if (mutation.action === 'COMPLETE_TICKET') {
+                      await completeTicketRemote(
+                        mutation.ticketId,
+                        mutation.payload?.technicalReport || '',
+                        mutation.payload?.closureNotes || '',
+                        mutation.payload?.schoolRepDoc || '',
+                        mutation.payload?.signatureSvg || ''
+                      );
+                      return true;
+                    }
+                    return true;
+                  });
                   refreshQueue();
-                }, 800);
+                } finally {
+                  setIsFlushing(false);
+                }
               }}
               disabled={isFlushing}
               className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 shadow disabled:opacity-50"

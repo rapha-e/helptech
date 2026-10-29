@@ -1,7 +1,7 @@
 {
-  "name": "HelpTech Escolas DF - PWA Técnico",
+  "name": "HelpTech Informática • Field Service & Service Desk",
   "short_name": "HelpTech Campo",
-  "description": "Aplicativo de campo e Service Desk escolar com suporte offline e georreferenciamento.",
+  "description": "Aplicativo de campo e gestão operacional com suporte offline resiliente e despacho georreferenciado.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",
@@ -9,11 +9,22 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232563eb'><path d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'/></svg>",
-      "sizes": "192x192 512x512",
-      "type": "image/svg+xml",
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ]
 }
-
