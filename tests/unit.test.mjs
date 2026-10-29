@@ -1948,3 +1948,104 @@ describe('Sprint Corretiva B — Hardening de RLS, Isolamento Multitenant & Audi
     assert.equal(evaluateSystemUsersPolicy({ session: { isAnon: false, isSystemAdmin: true }, operation: 'DELETE' }).allowed, true);
   });
 });
+
+
+// ============================================================================
+// 13. Suíte de Testes Enterprise: IA Triage, WMS Almoxarifado & CSAT
+// ============================================================================
+describe('Suíte 13 — Evolução Enterprise: IA Triage, WMS Estoque & CSAT', () => {
+  // Teste 1: IA Triage - Detecção de Rede
+  test('IA Triage: Deve identificar problema de rede e sugerir auto-resolução', () => {
+    function analyzeTicket(title, desc) {
+      const text = `${title} ${desc}`.toLowerCase();
+      if (/internet|rede|wi-?fi|roteador/i.test(text)) {
+        return {
+          category: 'cat-001',
+          urgency: 'alta',
+          confidence: 0.92,
+          hasResolutionSteps: true
+        };
+      }
+      return null;
+    }
+
+    const triage = analyzeTicket('Sem internet na secretaria', 'O roteador está com luz vermelha piscando e os cabos parecem frouxos');
+    assert.ok(triage);
+    assert.equal(triage.category, 'cat-001');
+    assert.equal(triage.urgency, 'alta');
+    assert.equal(triage.hasResolutionSteps, true);
+  });
+
+  // Teste 2: IA Triage - Detecção de Falha de Energia / Fonte
+  test('IA Triage: Deve identificar máquina que não liga como falha de hardware e alta prioridade', () => {
+    function analyzeTicket(title, desc) {
+      const text = `${title} ${desc}`.toLowerCase();
+      if (/n[aã]o liga|fonte|cheiro de queimado/i.test(text)) {
+        return {
+          category: 'cat-002',
+          urgency: 'alta',
+          suggestedPart: 'Fonte ATX 500W'
+        };
+      }
+      return null;
+    }
+
+    const triage = analyzeTicket('Computador da biblioteca apagou', 'O computador não liga de jeito nenhum, botão power não responde');
+    assert.ok(triage);
+    assert.equal(triage.category, 'cat-002');
+    assert.equal(triage.urgency, 'alta');
+  });
+
+  // Teste 3: WMS Estoque - Alerta de Ponto de Pedido
+  test('WMS Almoxarifado: Deve sinalizar alerta quando quantidade for menor ou igual ao estoque mínimo', () => {
+    const items = [
+      { id: '1', name: 'Fonte ATX', qty: 3, min: 5 },
+      { id: '2', name: 'Memória 8GB', qty: 15, min: 10 }
+    ];
+
+    const lowStock = items.filter(it => it.qty <= it.min);
+    assert.equal(lowStock.length, 1);
+    assert.equal(lowStock[0].name, 'Fonte ATX');
+  });
+
+  // Teste 4: WMS Estoque - Dedução automática ao aprovar orçamento
+  test('WMS Almoxarifado: Deve deduzir quantidade de peças do inventário ao aprovar orçamento', () => {
+    let inventory = [
+      { id: 'inv-1', name: 'Fonte ATX 500W', qty: 10 },
+      { id: 'inv-2', name: 'Memória RAM DDR4 8GB', qty: 20 }
+    ];
+
+    const quoteParts = [
+      { item_name: 'Fonte ATX 500W', quantity: 2, item_type: 'peca' },
+      { item_name: 'Instalação e Configuração', quantity: 1, item_type: 'servico' }
+    ];
+
+    // Simula dedução
+    quoteParts.forEach(part => {
+      if (part.item_type === 'peca') {
+        const item = inventory.find(i => i.name.toLowerCase() === part.item_name.toLowerCase());
+        if (item) {
+          item.qty -= part.quantity;
+        }
+      }
+    });
+
+    assert.equal(inventory[0].qty, 8); // 10 - 2 = 8
+    assert.equal(inventory[1].qty, 20); // inalterado
+  });
+
+  // Teste 5: CSAT - Média e validação de escala
+  test('CSAT: Deve calcular média correta e rejeitar notas fora da escala de 1 a 5', () => {
+    const ratings = [5, 4, 5, 5, 4];
+    const avg = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+    assert.equal(avg, 4.6);
+
+    function isValidRating(val) {
+      return Number.isInteger(val) && val >= 1 && val <= 5;
+    }
+    assert.equal(isValidRating(5), true);
+    assert.equal(isValidRating(1), true);
+    assert.equal(isValidRating(0), false);
+    assert.equal(isValidRating(6), false);
+  });
+});

@@ -5,7 +5,8 @@ import type {
   School,
   TicketCategory,
   SystemUser,
-  RegionalCoordination
+  RegionalCoordination,
+  InventoryItem
 } from '../data/seedData';
 import {
   INITIAL_TICKETS,
@@ -13,7 +14,8 @@ import {
   SCHOOLS,
   TICKET_CATEGORIES,
   REGIONAL_COORDINATIONS,
-  INITIAL_SYSTEM_USERS
+  INITIAL_SYSTEM_USERS,
+  INITIAL_INVENTORY
 } from '../data/seedData';
 import {
   getBestCandidateTechnician,
@@ -109,6 +111,28 @@ export function saveStoredSystemUsers(users: SystemUser[]) {
   }
 }
 
+const INVENTORY_STORAGE_KEY = 'helptechinfo_inventory_v2';
+
+export function getStoredInventory(): InventoryItem[] {
+  try {
+    const raw = localStorage.getItem(INVENTORY_STORAGE_KEY);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (err) {
+    console.error('Falha ao ler inventário do storage:', err);
+  }
+  return INITIAL_INVENTORY;
+}
+
+export function saveStoredInventory(items: InventoryItem[]) {
+  try {
+    localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(items));
+  } catch (err) {
+    console.error('Falha ao persistir inventário:', err);
+  }
+}
+
 // Hook principal de gerenciamento do ecossistema de dados com persistência Supabase
 export function useAppStore() {
   const [tickets, setTickets] = useState<Ticket[]>(getStoredTickets);
@@ -117,6 +141,7 @@ export function useAppStore() {
   const [schools, setSchools] = useState<School[]>(SCHOOLS);
   const [categories, setCategories] = useState<TicketCategory[]>(TICKET_CATEGORIES);
   const [regions, setRegions] = useState<RegionalCoordination[]>(REGIONAL_COORDINATIONS);
+  const [inventory, setInventory] = useState<InventoryItem[]>(getStoredInventory);
 
   const [remoteStatus, setRemoteStatus] = useState<'conectado' | 'offline_fallback'>(
     isSupabaseConfigured ? 'conectado' : 'offline_fallback'
@@ -224,6 +249,10 @@ export function useAppStore() {
   useEffect(() => {
     saveStoredSystemUsers(systemUsers);
   }, [systemUsers]);
+
+  useEffect(() => {
+    saveStoredInventory(inventory);
+  }, [inventory]);
 
   // Checa periodicamente se há chamados despachados cujo timeout de 20 min expirou
   useEffect(() => {
@@ -1130,8 +1159,44 @@ export function useAppStore() {
     saveStoredSystemUsers(INITIAL_SYSTEM_USERS);
   };
 
+    const updateInventoryQuantity = (id: string, delta: number) => {
+    setInventory((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, quantity_in_stock: Math.max(0, item.quantity_in_stock + delta) } : item
+      )
+    );
+  };
+
+  const addInventoryItem = (item: Omit<InventoryItem, 'id'>) => {
+    const newEntry: InventoryItem = {
+      ...item,
+      id: 'inv-' + Date.now().toString().slice(-4)
+    };
+    setInventory((prev) => [...prev, newEntry]);
+  };
+
+  const submitTicketCsat = (ticketId: string, rating: number, comment?: string) => {
+    setTickets((prev) =>
+      prev.map((t) => {
+        if (t.id === ticketId) {
+          return {
+            ...t,
+            csat_rating: rating,
+            csat_comment: comment || '',
+            csat_at: new Date().toISOString()
+          };
+        }
+        return t;
+      })
+    );
+  };
+
   return {
     tickets,
+    inventory,
+    updateInventoryQuantity,
+    addInventoryItem,
+    submitTicketCsat,
     technicians,
     systemUsers,
     schools,

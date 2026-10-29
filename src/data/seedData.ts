@@ -169,7 +169,94 @@ export interface Ticket {
   attachments: TicketAttachment[];
   dispatch_logs: TicketDispatchLog[];
   notifications?: TicketNotification[];
+  csat_rating?: number;
+  csat_comment?: string;
+  csat_at?: string;
 }
+
+export interface InventoryItem {
+  id: string;
+  sku: string;
+  name: string;
+  category: 'rede' | 'hardware' | 'eletrica' | 'impressao' | 'periferico';
+  quantity_in_stock: number;
+  min_stock_alert: number;
+  unit_price: number;
+  unit: 'un' | 'm' | 'kit';
+}
+
+export const INITIAL_INVENTORY: InventoryItem[] = [
+  {
+    id: 'inv-001',
+    sku: 'HW-MEM-DDR4-8GB',
+    name: 'Memória RAM DDR4 8GB 2666MHz Kingston',
+    category: 'hardware',
+    quantity_in_stock: 45,
+    min_stock_alert: 10,
+    unit_price: 145.0,
+    unit: 'un'
+  },
+  {
+    id: 'inv-002',
+    sku: 'HW-SSD-480GB',
+    name: 'SSD 480GB Kingston SATA III 2.5"',
+    category: 'hardware',
+    quantity_in_stock: 28,
+    min_stock_alert: 8,
+    unit_price: 189.9,
+    unit: 'un'
+  },
+  {
+    id: 'inv-003',
+    sku: 'HW-FONTE-500W',
+    name: 'Fonte ATX 500W 80 Plus Bronze PFC Ativo',
+    category: 'hardware',
+    quantity_in_stock: 19,
+    min_stock_alert: 5,
+    unit_price: 215.0,
+    unit: 'un'
+  },
+  {
+    id: 'inv-004',
+    sku: 'RED-CABO-CAT6',
+    name: 'Cabo de Rede UTP CAT6 Furukawa Azul (Bobina)',
+    category: 'rede',
+    quantity_in_stock: 320,
+    min_stock_alert: 50,
+    unit_price: 3.8,
+    unit: 'm'
+  },
+  {
+    id: 'inv-005',
+    sku: 'RED-RJ45-CAT6',
+    name: 'Conector Macho RJ-45 CAT6 Pacote c/ 50 un',
+    category: 'rede',
+    quantity_in_stock: 64,
+    min_stock_alert: 15,
+    unit_price: 45.0,
+    unit: 'kit'
+  },
+  {
+    id: 'inv-006',
+    sku: 'RED-AP-GIGA',
+    name: 'Roteador / Access Point Dual Band Gigabit AC1200',
+    category: 'rede',
+    quantity_in_stock: 14,
+    min_stock_alert: 4,
+    unit_price: 280.0,
+    unit: 'un'
+  },
+  {
+    id: 'inv-007',
+    sku: 'PER-KIT-KB-MOUSE',
+    name: 'Kit Teclado e Mouse USB ABNT2 Padrão SEEDF',
+    category: 'periferico',
+    quantity_in_stock: 52,
+    min_stock_alert: 12,
+    unit_price: 85.0,
+    unit: 'kit'
+  }
+];
 
 export const REGIONAL_COORDINATIONS: RegionalCoordination[] = [
   { id: 'cre-braz', code: 'CRE_BRAZLANDIA', name: 'Brazlândia', active: true },

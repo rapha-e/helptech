@@ -90,7 +90,11 @@ export const App: React.FC = () => {
     updateSystemUser,
     deleteSystemUser,
     toggleSystemUserActive,
-    resetDatabase
+    resetDatabase,
+    inventory,
+    updateInventoryQuantity,
+    addInventoryItem,
+    submitTicketCsat
   } = useAppStore();
 
   const handleUserChange = (user: AuthUserProfile | null) => {
@@ -287,6 +291,7 @@ export const App: React.FC = () => {
                 onCreateTicket={createTicket}
                 onDecideQuote={decideQuote}
                 onViewOS={(ticket) => setViewingOsTicket(ticket)}
+                onSubmitCsat={submitTicketCsat}
               />
             )}
 
@@ -330,6 +335,9 @@ export const App: React.FC = () => {
                 onDeleteSystemUser={deleteSystemUser}
                 onToggleSystemUserActive={toggleSystemUserActive}
                 onResetDatabase={resetDatabase}
+                inventory={inventory}
+                onUpdateInventoryQuantity={updateInventoryQuantity}
+                onAddInventoryItem={addInventoryItem}
               />
             )}
           </Suspense>

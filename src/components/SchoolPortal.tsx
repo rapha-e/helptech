@@ -26,10 +26,14 @@ import {
   MapPin,
   Phone,
   Mail,
-  QrCode
+  QrCode,
+  Star
 } from 'lucide-react';
 import { BarcodeScannerModal } from './BarcodeScannerModal';
 import { TicketJourneyTracker } from './TicketJourneyTracker';
+import { AiTriageAssistant } from './AiTriageAssistant';
+import { analyzeTicketDescription } from '../lib/aiTriageService';
+import { CsatSurveyModal } from './CsatSurveyModal';
 
 interface SchoolPortalProps {
   schools: School[];
@@ -42,6 +46,7 @@ interface SchoolPortalProps {
   ) => Ticket;
   onDecideQuote: (ticketId: string, approved: boolean, name: string, reason?: string) => void;
   onViewOS: (ticket: Ticket) => void;
+  onSubmitCsat?: (ticketId: string, rating: number, comment?: string) => void;
 }
 
 const DRAFT_KEY = 'helptechinfo_school_draft';
@@ -64,7 +69,8 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
   tickets,
   onCreateTicket,
   onDecideQuote,
-  onViewOS
+  onViewOS,
+  onSubmitCsat
 }) => {
   const [activeTab, setActiveTab] = useState<'abrir' | 'rastrear'>('abrir');
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -96,6 +102,8 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [createdSuccessTicket, setCreatedSuccessTicket] = useState<Ticket | null>(null);
   const [showScanner, setShowScanner] = useState(false);
+  const [showCsatModal, setShowCsatModal] = useState(false);
+  const [dismissTriage, setDismissTriage] = useState(false);
 
   // Rastreamento restrito aos chamados do usuário
   const [myTicketIds, setMyTicketIds] = useState<string[]>(() => {
@@ -113,6 +121,7 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
     }
   });
   const [selectedTrackedTicket, setSelectedTrackedTicket] = useState<Ticket | null>(null);
+  const triageResult = !dismissTriage ? analyzeTicketDescription(formData.title, formData.description) : null;
 
   // Atualiza escola quando a CRE muda (mantém escola limpa para seleção)
   const handleCreChange = (newCreId: string) => {
@@ -837,6 +846,17 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                         </p>
                       )}
                     </div>
+
+                    {/* ASSISTENTE DE IA & TRIAGE PREDITIVA */}
+                    {triageResult && (
+                      <AiTriageAssistant
+                        triage={triageResult}
+                        onApplyCategory={(cat, urg) => {
+                          setFormData((prev) => ({ ...prev, category_id: cat, urgency_level: urg }));
+                        }}
+                        onDismiss={() => setDismissTriage(true)}
+                      />
+                    )}
                   </div>
                 )}
 
@@ -1114,6 +1134,42 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
               {/* JORNADA VISUAL DO ATENDIMENTO (STEPPER) */}
               <TicketJourneyTracker ticket={selectedTrackedTicket} />
 
+              {/* AVALIAÇÃO CSAT SE CHAMADO CONCLUÍDO */}
+              {selectedTrackedTicket.status === 'concluido' && (
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between gap-3 animate-fadeIn">
+                  <div>
+                    <div className="font-bold text-xs text-emerald-900 flex items-center gap-1.5">
+                      <CheckCircle2 size={15} className="text-emerald-600" />
+                      Atendimento Concluído com Ateste Escolar
+                    </div>
+                    {selectedTrackedTicket.csat_rating ? (
+                      <div className="text-[11.5px] text-emerald-700 mt-1 flex items-center gap-1.5 flex-wrap">
+                        <span>Sua Avaliação:</span>
+                        <span className="font-bold text-amber-500 text-sm">{'★'.repeat(selectedTrackedTicket.csat_rating)}{'☆'.repeat(5 - selectedTrackedTicket.csat_rating)}</span>
+                        <span className="text-slate-500 text-[10.5px]">({selectedTrackedTicket.csat_rating}/5 estrelas)</span>
+                        {selectedTrackedTicket.csat_comment && (
+                          <span className="text-slate-600 italic block w-full mt-0.5 font-medium">"{selectedTrackedTicket.csat_comment}"</span>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-emerald-700 mt-0.5">
+                        Avalie a rapidez e cortesia do técnico para aprimorar o contrato SEEDF.
+                      </p>
+                    )}
+                  </div>
+
+                  {!selectedTrackedTicket.csat_rating && (
+                    <button
+                      type="button"
+                      onClick={() => setShowCsatModal(true)}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow flex items-center gap-1.5 shrink-0"
+                    >
+                      <Star size={13} className="fill-amber-300 text-amber-300" /> Avaliar Atendimento
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* AVISO: VISITA TÉCNICA AGENDADA */}
               {selectedTrackedTicket.status === 'visita_agendada' && (
                 <div className="p-3.5 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900 space-y-1">
@@ -1313,6 +1369,22 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
         }}
         title="Escanear Etiqueta de Patrimônio SEEDF"
       />
+
+      {/* MODAL DE PESQUISA DE SATISFAÇÃO CSAT */}
+      {selectedTrackedTicket && (
+        <CsatSurveyModal
+          isOpen={showCsatModal}
+          ticketProtocol={selectedTrackedTicket.protocol}
+          technicianName={selectedTrackedTicket.assigned_technician_name}
+          onClose={() => setShowCsatModal(false)}
+          onSubmitRating={(rating, comment) => {
+            if (onSubmitCsat) {
+              onSubmitCsat(selectedTrackedTicket.id, rating, comment);
+            }
+            setSelectedTrackedTicket((prev) => prev ? ({ ...prev, csat_rating: rating, csat_comment: comment, csat_at: new Date().toISOString() }) : null);
+          }}
+        />
+      )}
     </div>
   );
 };

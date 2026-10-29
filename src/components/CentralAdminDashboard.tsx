@@ -9,6 +9,9 @@ import type {
 } from '../data/seedData';
 import { getBestCandidateTechnician } from '../lib/geoEngine';
 import { SUPABASE_MASTER_DDL } from '../data/supabaseDdl';
+import { InventoryManagementModal } from './InventoryManagementModal';
+import { OfficialAuditReportModal } from './OfficialAuditReportModal';
+import type { InventoryItem } from '../data/seedData';
 import {
   Kanban,
   FileSpreadsheet,
@@ -33,7 +36,9 @@ import {
   Search,
   X,
   BarChart3,
-  Clock
+  Clock,
+  Star,
+  Package
 } from 'lucide-react';
 import {
   calculateTicketSla,
@@ -60,6 +65,9 @@ interface CentralAdminDashboardProps {
   onDeleteSystemUser?: (id: string) => void;
   onToggleSystemUserActive?: (id: string) => void;
   onResetDatabase: () => void;
+  inventory?: InventoryItem[];
+  onUpdateInventoryQuantity?: (id: string, delta: number) => void;
+  onAddInventoryItem?: (item: Omit<InventoryItem, 'id'>) => void;
 }
 
 export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
@@ -80,8 +88,13 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   onUpdateSystemUser,
   onDeleteSystemUser,
   onToggleSystemUserActive,
-  onResetDatabase
+  onResetDatabase,
+  inventory = [],
+  onUpdateInventoryQuantity = () => {},
+  onAddInventoryItem = () => {}
 }) => {
+  const [showInventoryModal, setShowInventoryModal] = useState<boolean>(false);
+  const [showAuditReportModal, setShowAuditReportModal] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'kanban' | 'prestacao' | 'despacho' | 'sla' | 'tecnicos' | 'usuarios' | 'sql'>('kanban');
   const [selectedCre, setSelectedCre] = useState<string>('todas');
   const [selectedUrgency, setSelectedUrgency] = useState<string>('todas');
@@ -231,6 +244,10 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   });
 
   // Métricas de Governança
+  const ratedTickets = tickets.filter((t) => t.csat_rating);
+  const avgCsatRating = ratedTickets.length > 0
+    ? (ratedTickets.reduce((acc, t) => acc + (t.csat_rating || 0), 0) / ratedTickets.length).toFixed(1)
+    : '5.0';
   const totalTickets = tickets.length;
   const inProgressTickets = tickets.filter((t) =>
     ['despachado', 'em_deslocamento', 'em_atendimento'].includes(t.status)
@@ -323,7 +340,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Top Bar de KPIs em Tempo Real */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
           <div className="flex items-center justify-between text-slate-500 mb-1">
             <span className="text-[11px] font-bold uppercase tracking-wider">Total de Chamados</span>
@@ -369,7 +386,17 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
             R$ {totalBudgetSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
           </div>
           <div className="text-[10px] text-slate-400 mt-1">Peças e serviços aprovados</div>
+  
+
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Satisfação CSAT</span>
+            <Star size={16} className="text-amber-500 fill-amber-400" />
+          </div>
+          <div className="text-2xl font-black text-amber-600">{avgCsatRating} ★</div>
+          <div className="text-[10px] text-slate-400 mt-1">{ratedTickets.length} avaliações das escolas</div>
         </div>
+      </div>
       </div>
 
       {/* Menu Superior do Dashboard */}
@@ -434,6 +461,22 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
             }`}
           >
             <Users size={14} /> Administradores & Acessos ({systemUsers.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowInventoryModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 shadow-xs"
+            title="Gestão de Estoque e Almoxarifado Central"
+          >
+            <Package size={14} className="text-amber-500" /> Almoxarifado WMS ({inventory.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowAuditReportModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 shadow-xs"
+            title="Emissão do Relatório Oficial de Prestação de Contas SEEDF / TCDF"
+          >
+            <FileSpreadsheet size={14} className="text-emerald-600" /> Relatório Oficial TCDF
           </button>
           <button
             onClick={() => setActiveTab('sql')}
@@ -1919,6 +1962,23 @@ $$ LANGUAGE plpgsql;`}
           </div>
         </div>
       )}
+
+      {/* MODAL DE ALMOXARIFADO CENTRAL & ESTOQUE WMS */}
+      <InventoryManagementModal
+        isOpen={showInventoryModal}
+        inventory={inventory}
+        onClose={() => setShowInventoryModal(false)}
+        onUpdateQuantity={onUpdateInventoryQuantity}
+        onAddItem={onAddInventoryItem}
+      />
+
+      {/* MODAL DE RELATÓRIO OFICIAL DE PRESTAÇÃO DE CONTAS SEEDF / TCDF */}
+      <OfficialAuditReportModal
+        isOpen={showAuditReportModal}
+        tickets={tickets}
+        regions={regions}
+        onClose={() => setShowAuditReportModal(false)}
+      />
     </div>
   );
 };
