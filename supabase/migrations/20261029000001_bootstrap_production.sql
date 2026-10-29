@@ -11,7 +11,6 @@ CREATE EXTENSION IF NOT EXISTS earthdistance;
 -- 2. Confirmação Imediata de E-mails Administrativos Registrados no Supabase Auth
 UPDATE auth.users 
 SET email_confirmed_at = COALESCE(email_confirmed_at, NOW()),
-    confirmed_at = COALESCE(confirmed_at, NOW()),
     updated_at = NOW()
 WHERE email IN (
     'suporte@helptech.com.br',
@@ -310,3 +309,4 @@ BEGIN
     DROP POLICY IF EXISTS "Acesso à Auditoria" ON public.ticket_audit_events;
     CREATE POLICY "Acesso à Auditoria" ON public.ticket_audit_events FOR ALL USING (true);
 END $$;
+
