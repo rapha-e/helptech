@@ -216,7 +216,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   type="button"
                   onClick={() => {
                     setEmail('tecnico@helptech.com.br');
-                    setPassword('Dio@sup.2203');
+                    setPassword('');
                     setErrorMessage('');
                   }}
                   className="p-2.5 rounded-xl border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50 text-slate-700 flex flex-col items-center gap-1 font-semibold transition-all text-center"
@@ -231,7 +231,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   type="button"
                   onClick={() => {
                     setEmail('suporte@helptech.com.br');
-                    setPassword('Dio@sup.2203');
+                    setPassword('');
                     setErrorMessage('');
                   }}
                   className="p-2.5 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-slate-700 flex flex-col items-center gap-1 font-semibold transition-all text-center"

@@ -189,7 +189,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
   {
     id: 'inv-001',
     sku: 'HW-MEM-DDR4-8GB',
-    name: 'Memória RAM DDR4 8GB 2666MHz Kingston',
+    name: 'Memória RAM DDR4 8GB 2666MHz Padrão',
     category: 'hardware',
     quantity_in_stock: 45,
     min_stock_alert: 10,
@@ -199,7 +199,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
   {
     id: 'inv-002',
     sku: 'HW-SSD-480GB',
-    name: 'SSD 480GB Kingston SATA III 2.5"',
+    name: 'SSD 480GB SATA III 2.5" Solid State',
     category: 'hardware',
     quantity_in_stock: 28,
     min_stock_alert: 8,
@@ -219,7 +219,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
   {
     id: 'inv-004',
     sku: 'RED-CABO-CAT6',
-    name: 'Cabo de Rede UTP CAT6 Furukawa Azul (Bobina)',
+    name: 'Cabo de Rede UTP CAT6 Homologado 100% Cobre (Bobina)',
     category: 'rede',
     quantity_in_stock: 320,
     min_stock_alert: 50,

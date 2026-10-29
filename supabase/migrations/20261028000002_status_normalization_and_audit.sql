@@ -1,6 +1,6 @@
 -- ============================================================================
 -- MIGRATION 02: Normalização de Status de Chamados, RBAC e Trilha de Auditoria
--- HelpTech Escolas DF (SEEDF)
+-- HelpTech Informática • Gestão e Despacho de TI
 -- ============================================================================
 
 -- 5. TABELA DE USUÁRIOS ADMINISTRATIVOS & CONTROLADORIA (RBAC)
@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS system_users (
     name VARCHAR(150) NOT NULL,
     email VARCHAR(150) UNIQUE NOT NULL,
     phone VARCHAR(20),
-    role VARCHAR(50) DEFAULT 'controladoria' CHECK (role IN ('admin', 'controladoria', 'auditor_seedf')),
+    role VARCHAR(50) DEFAULT 'controladoria' CHECK (role IN ('admin', 'controladoria', 'auditor_helptech')),
     active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()

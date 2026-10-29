@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS regional_coordinations (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. TABELA DE UNIDADES ESCOLARES (REDE OFICIAL SEEDF)
+-- 2. TABELA DE UNIDADES ESCOLARES (REDE OFICIAL DE ESCOLAS)
 CREATE TABLE IF NOT EXISTS schools (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cre_id UUID NOT NULL REFERENCES regional_coordinations(id) ON DELETE RESTRICT,
@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS system_users (
     name VARCHAR(150) NOT NULL,
     email VARCHAR(150) UNIQUE NOT NULL,
     phone VARCHAR(20),
-    role VARCHAR(50) DEFAULT 'controladoria' CHECK (role IN ('admin', 'controladoria', 'auditor_seedf')),
+    role VARCHAR(50) DEFAULT 'controladoria' CHECK (role IN ('admin', 'controladoria', 'auditor_helptech')),
     active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()

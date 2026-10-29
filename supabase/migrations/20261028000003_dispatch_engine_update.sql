@@ -1,6 +1,6 @@
 -- ============================================================================
 -- MIGRATION 03: Motor de Despacho Inteligente & Seed Inicial Idempotente
--- HelpTech Escolas DF (SEEDF)
+-- HelpTech Informática • Gestão e Despacho de TI
 -- ============================================================================
 
 -- ATUALIZAÇÃO DA FUNÇÃO RPC DE DESPACHO COM TODOS OS STATUS ATIVOS CONSIDERADOS

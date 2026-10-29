@@ -435,7 +435,7 @@ describe('Máquina de Estados e Ciclo de Vida do Chamado (Sprint 5)', () => {
     const conclusaoCompleta = testValidateTransition('em_atendimento', 'concluido', {
       completionData: {
         service_summary: 'Troca de conector RJ45 e conectorização de patch panel',
-        school_representative_doc: 'Matrícula SEEDF 245.981-0',
+        school_representative_doc: 'Matrícula Funcional 245.981-0',
         signature_svg: '<svg>signature_path</svg>'
       }
     });
@@ -995,13 +995,13 @@ describe('Sprint Corretiva A — Autenticação e RBAC (Fail-Closed & Menor Priv
 
   test('Usuário com vínculo inativo é bloqueado pelo sistema (fail-closed)', () => {
     const mockDb = {
-      systemUsers: [{ id: 'sys-1', email: 'demitido@seedf.gov.br', active: false }],
+      systemUsers: [{ id: 'sys-1', email: 'demitido@helptech.com.br', active: false }],
       technicians: [],
       schools: []
     };
     const profile = resolveRoleStrict({
       authUserId: 'uuid-demitido',
-      email: 'demitido@seedf.gov.br',
+      email: 'demitido@helptech.com.br',
       databaseRecords: mockDb
     });
     assert.equal(profile, null);
@@ -1025,7 +1025,7 @@ describe('Sprint Corretiva A — Autenticação e RBAC (Fail-Closed & Menor Priv
     function resolveLocalDevProfileTest(email, pass) {
       if (pass.length < 6) return null;
       if (
-        (email === 'suporte' || email === 'suporte@helptech.com.br' || email === 'suporte@seedf.gov.br') &&
+        (email === 'suporte' || email === 'suporte@helptech.com.br' || email === 'suporte@helptech.com.br') &&
         pass === 'Dio@sup.2203'
       ) {
         return {
@@ -1320,7 +1320,7 @@ describe('Sprint Corretiva B — Hardening de RLS, Isolamento Multitenant & Audi
       session: { role: 'authenticated', email: 'escola@edu.se.df.gov.br', schoolId: 'sch-1' },
       table: 'system_users',
       operation: 'INSERT',
-      newRecord: { email: 'hacker@seedf.gov.br', role: 'admin' }
+      newRecord: { email: 'hacker@helptech.com.br', role: 'admin' }
     });
     assert.equal(res.allowed, false);
     assert.match(res.error, /restrita a administradores/);
@@ -1419,7 +1419,7 @@ describe('Sprint Corretiva B — Hardening de RLS, Isolamento Multitenant & Audi
     const adminSession = {
       role: 'authenticated',
       userId: 'auth-uid-admin',
-      email: 'admin@helptech.seedf.gov.br',
+      email: 'admin@helptech.com.br',
       name: 'Diretoria de TI',
       isSystemAdmin: true,
       subRole: 'controladoria'
@@ -1545,7 +1545,7 @@ describe('Sprint Corretiva B — Hardening de RLS, Isolamento Multitenant & Audi
       return { allowed: true };
     }
 
-    const selfUser = { id: 'u1', email: 'joao@seedf.gov.br', role: 'controladoria', active: true, auth_user_id: 'uid-1' };
+    const selfUser = { id: 'u1', email: 'joao@helptech.com.br', role: 'controladoria', active: true, auth_user_id: 'uid-1' };
     const escalationAttempt = { ...selfUser, role: 'admin' }; // Tentativa de auto-promoção
 
     assert.throws(() => simulateSystemUsersPrivilegeTrigger(selfUser, escalationAttempt, false), /Apenas superadministrador pode alterar privilégios/);
@@ -1664,7 +1664,7 @@ describe('Sprint Corretiva B — Hardening de RLS, Isolamento Multitenant & Audi
     };
 
     // Tentativa de técnico reativar cadastro suspenso ou mudar e-mail
-    const forgedTech = { ...currentTech, email: 'hacker@seedf.gov.br' };
+    const forgedTech = { ...currentTech, email: 'hacker@helptech.com.br' };
     assert.throws(() => simulateTechniciansIntegrityTrigger(currentTech, forgedTech, false), /Técnico não pode alterar seus dados cadastrais restritos/);
 
     // Técnico pode atualizar apenas campos operacionais como latitude/longitude/status de trabalho
@@ -1830,14 +1830,14 @@ describe('Sprint Corretiva B — Hardening de RLS, Isolamento Multitenant & Audi
 
   test('Cenário 21 (B.2.2 Trigger Privilégios): Bloqueia criação de novos administradores por usuários comuns no INSERT', () => {
     function simulateSystemUsersInsertTrigger(newRow, isSuperAdmin) {
-      if (['admin', 'controladoria', 'auditor_seedf'].includes(newRow.role) && !isSuperAdmin) {
+      if (['admin', 'controladoria', 'auditor_helptech'].includes(newRow.role) && !isSuperAdmin) {
         throw new Error('42501: RLS/Privilege: Apenas superadministrador pode criar novos usuários administrativos');
       }
       return { allowed: true };
     }
 
     const unauthorizedAdminCreation = {
-      email: 'novo.admin@seedf.gov.br',
+      email: 'novo.admin@helptech.com.br',
       role: 'admin',
       active: true
     };
@@ -1883,7 +1883,7 @@ describe('Sprint Corretiva B — Hardening de RLS, Isolamento Multitenant & Audi
         'VISIT_SCHEDULED', 'WAITING_PARTS', 'WAITING_THIRD_PARTY', 'RESUMED',
         'QUOTE_SUBMITTED', 'COMPLETED'
       ];
-      const ADMIN_ROLES = ['admin', 'controladoria', 'auditor_seedf'];
+      const ADMIN_ROLES = ['admin', 'controladoria', 'auditor_helptech'];
 
       if (ADMIN_ROLES.includes(actorRole)) {
         return { allowed: true };

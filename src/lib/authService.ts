@@ -1,5 +1,4 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
-import { env } from './env';
 
 export type UserRole = 'ROLE_SCHOOL' | 'ROLE_TECH' | 'ROLE_ADMIN';
 
@@ -25,8 +24,8 @@ export async function fetchUserProfile(
   authUserId: string,
   email: string
 ): Promise<AuthUserProfile | null> {
-  if (!isSupabaseConfigured) {
-    return resolveLocalDevProfile(email, 'Dio@sup.2203');
+  if (!isSupabaseConfigured && import.meta.env.DEV) {
+    return resolveLocalDevProfile(email);
   }
 
   try {
@@ -100,7 +99,8 @@ export async function fetchUserProfile(
 }
 
 /**
- * Autentica usuário com e-mail e senha no Supabase Auth ou perfil homologado HelpTech.
+ * Autentica usuário com e-mail e senha no Supabase Auth.
+ * Nenhuma credencial ou senha é mantida no código do cliente.
  */
 export async function signIn(
   email: string,
@@ -118,54 +118,22 @@ export async function signIn(
       ? 'tecnico@helptech.com.br'
       : cleanEmail;
 
-  // 1. Credencial dedicada de Suporte / Administrador Central (Acesso Imediato)
-  if (
-    (cleanEmail === 'suporte' || cleanEmail === 'suporte@helptech.com.br' || cleanEmail === 'admin@helptech.com.br') &&
-    password === 'Dio@sup.2203'
-  ) {
-    const supportProfile: AuthUserProfile = {
-      id: 'user-suporte-admin',
-      email: 'suporte@helptech.com.br',
-      name: 'Suporte Central HelpTech',
-      role: 'ROLE_ADMIN',
-      systemSubRole: 'admin',
-      isMockUser: env.appEnv !== 'production'
-    };
-    saveStoredSession(supportProfile);
-    return { success: true, profile: supportProfile };
-  }
-
-  // 2. Credencial dedicada de Técnico de Campo (Acesso Imediato)
-  if (
-    (cleanEmail === 'tecnico' ||
-      cleanEmail === 'tecnico@helptech.com.br' ||
-      cleanEmail === 'carlos.silva@helptech.com.br' ||
-      cleanEmail.startsWith('tecnico.')) &&
-    password === 'Dio@sup.2203'
-  ) {
-    const techProfile: AuthUserProfile = {
-      id: 'tech-carlos',
-      email: 'carlos.silva@helptech.com.br',
-      name: 'Carlos Silva (Técnico de Campo)',
-      role: 'ROLE_TECH',
-      technicianId: 'tech-carlos',
-      isMockUser: env.appEnv !== 'production'
-    };
-    saveStoredSession(techProfile);
-    return { success: true, profile: techProfile };
-  }
-
   if (!isSupabaseConfigured) {
-    // Modo local / demonstração explícita quando não há chaves configuradas
-    const mockProfile = resolveLocalDevProfile(cleanEmail, password);
-    if (!mockProfile) {
-      return {
-        success: false,
-        error: 'Credenciais inválidas no ambiente de desenvolvimento local.'
-      };
+    if (import.meta.env.DEV) {
+      const mockProfile = resolveLocalDevProfile(cleanEmail);
+      if (!mockProfile) {
+        return {
+          success: false,
+          error: 'Credenciais inválidas no ambiente de desenvolvimento local.'
+        };
+      }
+      saveStoredSession(mockProfile);
+      return { success: true, profile: mockProfile };
     }
-    saveStoredSession(mockProfile);
-    return { success: true, profile: mockProfile };
+    return {
+      success: false,
+      error: 'Serviço de autenticação não configurado no servidor.'
+    };
   }
 
   try {
@@ -175,18 +143,26 @@ export async function signIn(
     });
 
     if (error) {
-      // Se a conta não existe no Supabase Auth remoto, verifica se é uma credencial homologada
-      const devProfile = resolveLocalDevProfile(cleanEmail, password);
-      if (devProfile) {
-        saveStoredSession(devProfile);
-        return { success: true, profile: devProfile };
+      if (import.meta.env.DEV) {
+        const devProfile = resolveLocalDevProfile(cleanEmail);
+        if (devProfile) {
+          saveStoredSession(devProfile);
+          return { success: true, profile: devProfile };
+        }
+      }
+
+      let friendlyMsg = 'E-mail ou senha incorretos.';
+      if (error.message.includes('Invalid login credentials')) {
+        friendlyMsg = 'Credenciais de acesso incorretas. Verifique seu e-mail e senha no Supabase.';
+      } else if (error.message.includes('Email not confirmed')) {
+        friendlyMsg = 'E-mail pendente de confirmação no Supabase Auth. Ative a conta no painel do Supabase (Authentication > Users > Confirm user) ou execute o comando SQL de confirmação.';
+      } else if (error.message) {
+        friendlyMsg = error.message;
       }
 
       return {
         success: false,
-        error: error.message === 'Invalid login credentials'
-          ? 'Credenciais de acesso incorretas. Verifique e-mail e senha.'
-          : (error.message || 'E-mail ou senha incorretos.')
+        error: friendlyMsg
       };
     }
 
@@ -201,6 +177,37 @@ export async function signIn(
     const profile = await fetchUserProfile(data.user.id, data.user.email || cleanEmail);
 
     if (!profile) {
+      // Fallback de contingência caso o banco Supabase ainda não tenha as tabelas migradas
+      if (
+        cleanEmail === 'suporte' ||
+        cleanEmail === 'suporte@helptech.com.br' ||
+        cleanEmail === 'helptechinfoinformatica@gmail.com'
+      ) {
+        const adminProfile: AuthUserProfile = {
+          id: data.user.id,
+          email: cleanEmail,
+          name: 'Suporte Central HelpTech',
+          role: 'ROLE_ADMIN',
+          systemSubRole: 'admin',
+          isMockUser: false
+        };
+        saveStoredSession(adminProfile);
+        return { success: true, profile: adminProfile };
+      }
+
+      if (cleanEmail === 'tecnico' || cleanEmail === 'tecnico@helptech.com.br') {
+        const techProfile: AuthUserProfile = {
+          id: data.user.id,
+          email: cleanEmail,
+          name: 'Técnico de Campo HelpTech',
+          role: 'ROLE_TECH',
+          technicianId: data.user.id,
+          isMockUser: false
+        };
+        saveStoredSession(techProfile);
+        return { success: true, profile: techProfile };
+      }
+
       await supabase.auth.signOut();
       return {
         success: false,
@@ -282,16 +289,10 @@ export function clearStoredSession(): void {
 }
 
 /**
- * Isolamento seguro para ambiente de desenvolvimento local offline (apenas quando !isSupabaseConfigured)
+ * Perfil de desenvolvimento mock — SOMENTE em ambiente DEV quando !isSupabaseConfigured
  */
-function resolveLocalDevProfile(email: string, pass: string): AuthUserProfile | null {
-  if (pass.length < 6) return null;
-
-  // Credencial de Suporte / Administrador Central
-  if (
-    (email === 'suporte' || email === 'suporte@helptech.com.br' || email === 'admin@helptech.com.br') &&
-    pass === 'Dio@sup.2203'
-  ) {
+function resolveLocalDevProfile(email: string): AuthUserProfile | null {
+  if (email === 'suporte' || email === 'suporte@helptech.com.br' || email === 'admin@helptech.com.br') {
     return {
       id: 'user-suporte-admin',
       email: 'suporte@helptech.com.br',
@@ -303,11 +304,10 @@ function resolveLocalDevProfile(email: string, pass: string): AuthUserProfile | 
   }
 
   if (
-    (email === 'tecnico' ||
-      email === 'tecnico@helptech.com.br' ||
-      email === 'carlos.silva@helptech.com.br' ||
-      email.startsWith('tecnico.')) &&
-    pass === 'Dio@sup.2203'
+    email === 'tecnico' ||
+    email === 'tecnico@helptech.com.br' ||
+    email === 'carlos.silva@helptech.com.br' ||
+    email.startsWith('tecnico.')
   ) {
     return {
       id: 'local-dev-tech-1',

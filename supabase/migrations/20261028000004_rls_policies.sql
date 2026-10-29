@@ -1,6 +1,6 @@
 -- ============================================================================
 -- MIGRATION 04: Políticas de Segurança em Nível de Linha (Row Level Security - RLS)
--- HelpTech Escolas DF (SEEDF)
+-- HelpTech Informática • Gestão e Despacho de TI
 -- ============================================================================
 
 -- 1. FUNÇÕES HELPER DE AUTENTICAÇÃO E PERFIL
@@ -20,7 +20,7 @@ BEGIN
     RETURN EXISTS (
         SELECT 1 FROM system_users 
         WHERE (auth_user_id = auth.uid() OR email = current_auth_email())
-          AND role IN ('admin', 'controladoria', 'auditor_seedf')
+          AND role IN ('admin', 'controladoria', 'auditor_helptech')
           AND active = TRUE
     );
 END;
@@ -137,7 +137,7 @@ TO authenticated
 USING (is_admin_or_controller());
 
 -- 6. POLÍTICAS PARA TRILHA DE AUDITORIA (IMUTABILIDADE)
-CREATE POLICY "Auditoria visível apenas para admins e auditores SEEDF"
+CREATE POLICY "Auditoria visível apenas para admins e auditores HelpTech"
 ON ticket_audit_events FOR SELECT
 TO authenticated
 USING (is_admin_or_controller());

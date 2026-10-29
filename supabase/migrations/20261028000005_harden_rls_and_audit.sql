@@ -1,6 +1,6 @@
 -- ============================================================================
 -- MIGRATION 05: Hardening de RLS, Isolamento Multitenant Estrito, Triggers de Integridade e Auditoria Inviolável
--- HelpTech Escolas DF (SEEDF)
+-- HelpTech Informática • Gestão e Despacho de TI
 -- Versão 2.4 (Sprint Corretiva B.2.2 - Fechamento de Bloqueios Residuais)
 -- ============================================================================
 
@@ -19,7 +19,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '';
 
--- 1.2 Identificação segura de Administrador / Controladoria / Auditoria SEEDF
+-- 1.2 Identificação segura de Administrador / Controladoria / Auditoria HelpTech
 CREATE OR REPLACE FUNCTION public.is_admin_or_controller()
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -28,7 +28,7 @@ BEGIN
         IF EXISTS (
             SELECT 1 FROM public.system_users 
             WHERE auth_user_id = auth.uid()
-              AND role IN ('admin', 'controladoria', 'auditor_seedf')
+              AND role IN ('admin', 'controladoria', 'auditor_helptech')
               AND active = TRUE
         ) THEN
             RETURN TRUE;
@@ -39,7 +39,7 @@ BEGIN
     RETURN EXISTS (
         SELECT 1 FROM public.system_users 
         WHERE email = public.current_auth_email()
-          AND role IN ('admin', 'controladoria', 'auditor_seedf')
+          AND role IN ('admin', 'controladoria', 'auditor_helptech')
           AND active = TRUE
     );
 END;
@@ -168,7 +168,7 @@ DROP POLICY IF EXISTS "Apenas admins visualizam usuários do sistema" ON public.
 DROP POLICY IF EXISTS "Apenas admins criam ou alteram usuários do sistema" ON public.system_users;
 DROP POLICY IF EXISTS "Leitura de técnicos por autenticados" ON public.technicians;
 DROP POLICY IF EXISTS "Apenas admins gerenciam cadastro de técnicos" ON public.technicians;
-DROP POLICY IF EXISTS "Auditoria visível apenas para admins e auditores SEEDF" ON public.ticket_audit_events;
+DROP POLICY IF EXISTS "Auditoria visível apenas para admins e auditores HelpTech" ON public.ticket_audit_events;
 DROP POLICY IF EXISTS "Inserção de auditoria permitida por usuários autenticados" ON public.ticket_audit_events;
 
 DROP POLICY IF EXISTS "tickets_admin_all_policy" ON public.tickets;
@@ -258,7 +258,7 @@ RETURNS TRIGGER AS $$
 BEGIN
     -- No INSERT: Bloqueia criação de conta com perfil privilegiado por quem não é Superadmin
     IF TG_OP = 'INSERT' THEN
-        IF NEW.role IN ('admin', 'controladoria', 'auditor_seedf') AND NOT public.is_system_admin() THEN
+        IF NEW.role IN ('admin', 'controladoria', 'auditor_helptech') AND NOT public.is_system_admin() THEN
             RAISE EXCEPTION 'RLS/Privilege: Apenas superadministrador pode criar novos usuários administrativos'
                 USING ERRCODE = '42501';
         END IF;

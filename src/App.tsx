@@ -1,6 +1,5 @@
 import React, { useState, Suspense, lazy } from 'react';
 import { useAppStore } from './lib/store';
-import { env } from './lib/env';
 import type { Ticket } from './data/seedData';
 import type { AuthUserProfile, UserRole } from './lib/authService';
 import { getStoredSession, signOut } from './lib/authService';
@@ -13,7 +12,6 @@ import {
   User,
   Database,
   RefreshCw,
-  AlertTriangle,
   LogIn,
   LogOut
 } from 'lucide-react';
@@ -137,13 +135,6 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-100 text-slate-800">
-      {/* AVISO DE AMBIENTE LOCAL / DEMONSTRAÇÃO SE APLICÁVEL */}
-      {env.appEnv !== 'production' && currentUser?.isMockUser && (
-        <div className="bg-amber-500 text-slate-900 px-4 py-1.5 text-xs font-bold flex items-center justify-center gap-2 shadow-sm border-b border-amber-600">
-          <AlertTriangle size={15} />
-          <span>AMBIENTE DE TESTES / SESSÃO LOCAL — Dados operacionais isolados. Não aplicável em produção.</span>
-        </div>
-      )}
 
       {/* HEADER INSTITUCIONAL GLOBAL */}
       <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40 shadow-md">

@@ -1,0 +1,47 @@
+name: CI - Qualidade, Segurança e Build
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate-and-build:
+    name: Lint, Test, Typecheck & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Instalar Dependências
+        run: npm ci
+
+      - name: Verificação de Tipos TypeScript
+        run: npx tsc -b
+
+      - name: Execução da Suíte de Testes Automatizados
+        run: npm test
+
+      - name: Build de Produção (Vite)
+        run: npm run build
+
+      - name: Varredura de Segurança no Bundle (Detecção de Segredos)
+        run: |
+          echo "Verificando se há credenciais ou segredos expostos no bundle dist/..."
+          if grep -rq "Dio@sup" dist/; then
+            echo "ERRO DE SEGURANÇA: Credencial hardcoded encontrada no dist/!"
+            exit 1
+          fi
+          if grep -rq "SEEDF" dist/; then
+            echo "ALERTA: Menção a SEEDF remanescente no dist/!"
+            exit 1
+          fi
+          echo "Bundle auditado e seguro com sucesso."

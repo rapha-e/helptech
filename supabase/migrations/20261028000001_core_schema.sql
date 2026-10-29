@@ -1,6 +1,6 @@
 -- ============================================================================
 -- MIGRATION 01: Core Schema & Extensões Geodésicas
--- HelpTech Escolas DF (SEEDF)
+-- HelpTech Informática • Gestão e Despacho de TI
 -- ============================================================================
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS regional_coordinations (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. TABELA DE UNIDADES ESCOLARES (REDE OFICIAL SEEDF)
+-- 2. TABELA DE UNIDADES ESCOLARES (REDE OFICIAL DE ESCOLAS)
 CREATE TABLE IF NOT EXISTS schools (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cre_id UUID NOT NULL REFERENCES regional_coordinations(id) ON DELETE RESTRICT,

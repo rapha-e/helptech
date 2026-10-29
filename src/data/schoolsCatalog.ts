@@ -5117,7 +5117,7 @@ export const OFFICIAL_SCHOOLS: OfficialSchool[] = [
     "cre_id": "cre-ppil",
     "cre_name": "Plano Piloto",
     "name": "EC 708 NORTE",
-    "address": "SHCGN 707 - SHCGN 707/708 AE 70297400 39016922 ec708ngmail.com REDE PUBLICA ESTADUAL VINCULADA A SEEDF",
+    "address": "SHCGN 707 - SHCGN 707/708 AE 70297400 39016922 ec708ngmail.com REDE PUBLICA ESTADUAL VINCULADA AO DISTRITO FEDERAL",
     "cep": "70000-000",
     "contact_phone": "(61) 3901-2000",
     "contact_email": "contato.escola@se.df.gov.br",
