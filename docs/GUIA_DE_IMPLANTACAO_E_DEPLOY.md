@@ -57,9 +57,10 @@ Acesse o **SQL Editor** do seu painel Supabase e execute as migrations versionad
 
 1. No menu lateral do Supabase, clique em **Storage** -> **New Bucket**.
 2. Nomeie o bucket como: `ticket-attachments`.
-3. Marque a opção **Public Bucket** (leitura pública via URL com hash do protocolo).
-4. Tamanho máximo por arquivo: `10MB`.
-5. Tipos MIME aceitos: `image/jpeg`, `image/png`, `image/webp`, `image/heic`, `application/pdf`.
+3. Mantenha a opção **Private Bucket** ativa (em conformidade com a LGPD e o Blueprint V2).
+4. O acesso aos arquivos ocorre estritamente por meio de **Signed URLs** com validade temporária de 15 minutos (900 segundos) geradas pelo `storageService.ts`.
+5. Tamanho máximo por arquivo: `10MB`.
+6. Tipos MIME aceitos: `image/jpeg`, `image/png`, `image/webp`, `image/heic`, `application/pdf`.
 
 ---
 
@@ -68,14 +69,14 @@ Acesse o **SQL Editor** do seu painel Supabase e execute as migrations versionad
 Antes de enviar para produção, execute os comandos de validação automatizada:
 
 ```bash
-# Executa linter (oxlint), verificação de tipos (tsc) e suíte com 39 testes unitários
+# Executa linter (oxlint), verificação de tipos (tsc) e suíte com 79 testes unitários
 npm run validate
 ```
 
 Critério de Aceite:
 - `oxlint`: 0 erros.
 - `tsc -b && vite build`: Compilação de assets em `dist/` gerada com sucesso.
-- `node --test tests/*.test.mjs`: **39 testes aprovados (0 falhas)**.
+- `node --test tests/*.test.mjs`: **79 testes aprovados (0 falhas)** em 13 suítes operacionais.
 
 ---
 

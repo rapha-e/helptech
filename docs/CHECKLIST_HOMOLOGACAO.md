@@ -18,7 +18,7 @@ Este documento consolida a matriz de verificação de qualidade para a entrada e
 | **7** | PWA do Técnico & Offline | Manifesto PWA instalado, fila FIFO local (`offlineQueue.ts`), sincronização sequencial pós-conexão | ✅ Aprovado |
 | **8** | Evidências & Assinatura Digital | Compressão cliente em WebP, coleta vetorial de assinatura SVG do gestor, geração da OS com impressão/PDF | ✅ Aprovado |
 | **9** | Painel de Gestão & SLA | Metas ITIL (4h/48h), pílulas visuais no Kanban, taxa percentual de SLA e exportação oficial em CSV | ✅ Aprovado |
-| **10** | Qualidade & Homologação | 39 testes unitários automatizados 100% aprovados, 0 erros no build e validação ponta a ponta | ✅ Aprovado |
+| **10** | Qualidade & Homologação | 79 testes unitários automatizados 100% aprovados, 0 erros no build e validação ponta a ponta | ✅ Aprovado |
 | **11** | Implantação Piloto | Parâmetros de homologação para as regionais pioneiras: CRE Brazlândia e CRE Ceilândia | ✅ Aprovado |
 | **12** | Handover & Documentação | Manual do Usuário, Guia de Deploy e checklist operacional formalizado | ✅ Aprovado |
 
