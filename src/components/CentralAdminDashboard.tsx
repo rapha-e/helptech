@@ -331,7 +331,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `relatorio_operacional_seedf_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `relatorio_operacional_helptech_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -474,9 +474,9 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
             type="button"
             onClick={() => setShowAuditReportModal(true)}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 shadow-xs"
-            title="Emissão do Relatório Oficial de Prestação de Contas SEEDF / TCDF"
+            title="Emissão do Relatório Oficial de Prestação de Contas Auditoria & Governança HelpTech"
           >
-            <FileSpreadsheet size={14} className="text-emerald-600" /> Relatório Oficial TCDF
+            <FileSpreadsheet size={14} className="text-emerald-600" /> Relatório Oficial Auditoria Interna
           </button>
           <button
             onClick={() => setActiveTab('sql')}
@@ -710,7 +710,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
             <div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-bold mb-1 border border-blue-200">
-                <BarChart3 size={12} /> Painel Executivo SEEDF
+                <BarChart3 size={12} /> Painel Executivo HelpTech
               </div>
               <h3 className="font-extrabold text-base text-slate-900">
                 Governança de SLA & Desempenho Regional
@@ -723,7 +723,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
               onClick={downloadOperationalCsv}
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-colors"
             >
-              <Download size={14} /> Exportar Relatório CSV da SEEDF
+              <Download size={14} /> Exportar Relatório CSV da HelpTech
             </button>
           </div>
 
@@ -1381,7 +1381,7 @@ $$ LANGUAGE plpgsql;`}
                 <option value="todas">Todos os Perfis de Acesso</option>
                 <option value="admin">Administrador Geral</option>
                 <option value="controladoria">Controladoria & Despacho</option>
-                <option value="auditor_seedf">Auditor Externo SEEDF</option>
+                <option value="auditor_helptech">Auditor Externo HelpTech</option>
               </select>
             </div>
 
@@ -1412,9 +1412,9 @@ $$ LANGUAGE plpgsql;`}
               </div>
             </div>
             <div className="bg-white p-3.5 rounded-xl border border-amber-200 bg-amber-50/20 shadow-sm">
-              <div className="text-[11px] font-bold uppercase text-amber-700">Auditores SEEDF</div>
+              <div className="text-[11px] font-bold uppercase text-amber-700">Auditores Internos</div>
               <div className="text-xl font-black text-amber-600 mt-0.5">
-                {systemUsers.filter((u) => u.role === 'auditor_seedf').length}
+                {systemUsers.filter((u) => u.role === 'auditor_helptech').length}
               </div>
             </div>
           </div>
@@ -1455,8 +1455,8 @@ $$ LANGUAGE plpgsql;`}
                           label: 'Controladoria & Despachante',
                           bg: 'bg-blue-50 text-blue-700 border-blue-200'
                         },
-                        auditor_seedf: {
-                          label: 'Auditor Externo SEEDF',
+                        auditor_helptech: {
+                          label: 'Auditor Externo HelpTech',
                           bg: 'bg-amber-50 text-amber-800 border-amber-200'
                         }
                       }[user.role];
@@ -1793,7 +1793,7 @@ $$ LANGUAGE plpgsql;`}
                 >
                   <option value="admin">Administrador Geral (Acesso total)</option>
                   <option value="controladoria">Controladoria & Despacho (Gestão de chamados e orçamentos)</option>
-                  <option value="auditor_seedf">Auditor Externo SEEDF (Prestação de contas e relatórios)</option>
+                  <option value="auditor_helptech">Auditor Externo HelpTech (Prestação de contas e relatórios)</option>
                 </select>
                 <p className="text-[10px] text-slate-400 mt-1">
                   Define o nível de permissão no painel de controle e na auditoria.
@@ -1869,7 +1869,7 @@ $$ LANGUAGE plpgsql;`}
                 rows={3}
                 value={quoteDecisionReason}
                 onChange={(e) => setQuoteDecisionReason(e.target.value)}
-                placeholder="Ex: Valor excede tabela contratual com a SEEDF / Equipamento obsoleto com recomendação de baixa patrimonial..."
+                placeholder="Ex: Valor excede tabela contratual com a HelpTech / Equipamento obsoleto com recomendação de baixa patrimonial..."
                 className="w-full text-xs p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-rose-500 outline-none"
               />
             </div>
@@ -1972,7 +1972,7 @@ $$ LANGUAGE plpgsql;`}
         onAddItem={onAddInventoryItem}
       />
 
-      {/* MODAL DE RELATÓRIO OFICIAL DE PRESTAÇÃO DE CONTAS SEEDF / TCDF */}
+      {/* MODAL DE RELATÓRIO OFICIAL DE PRESTAÇÃO DE CONTAS Auditoria & Governança HelpTech */}
       <OfficialAuditReportModal
         isOpen={showAuditReportModal}
         tickets={tickets}

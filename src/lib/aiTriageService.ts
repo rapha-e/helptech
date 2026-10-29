@@ -70,9 +70,10 @@ export function analyzeTicketDescription(title: string, description: string): Ai
         'Conecte o mouse/teclado em outra porta USB traseira da CPU.',
         'Aperte os parafusos laterais do cabo VGA ou troque o cabo HDMI de entrada no monitor.'
       ],
-      likelySpareParts: ['Kit Teclado e Mouse USB ABNT2 Padrão SEEDF', 'Cabo HDMI 2.0 1.8m']
+      likelySpareParts: ['Kit Teclado e Mouse USB ABNT2 Padrão HelpTech', 'Cabo HDMI 2.0 1.8m']
     };
   }
 
   return null;
 }
+

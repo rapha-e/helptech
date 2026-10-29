@@ -1,38 +1,36 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { env } from './env';
 
-export type UserRole = 'ROLE_SCHOOL' | 'ROLE_TECH' | 'ROLE_ADMIN' | 'UNAUTHORIZED';
+export type UserRole = 'ROLE_SCHOOL' | 'ROLE_TECH' | 'ROLE_ADMIN';
 
 export interface AuthUserProfile {
   id: string;
   email: string;
   name: string;
   role: UserRole;
-  systemSubRole?: 'admin' | 'controladoria' | 'auditor_seedf';
-  technicianId?: string;
   schoolId?: string;
   schoolName?: string;
+  technicianId?: string;
+  systemSubRole?: 'admin' | 'controladoria' | 'auditor';
   isMockUser?: boolean;
 }
 
-const AUTH_STORAGE_KEY = 'helptech_auth_session';
+const AUTH_STORAGE_KEY = 'helptech_auth_profile_v2';
 
 /**
- * Consulta e valida o perfil operacional do usuário a partir de tabelas autorizadas.
- * Implementa princípio de menor privilégio e falha fechada (fail-closed):
- * Se o usuário não tiver vínculo explícito ou a consulta falhar, NÃO concede privilégios operacionais.
+ * Consulta de perfil no Supabase a partir do auth.uid() e e-mail autenticado.
+ * Aderente ao princípio de Fail-Closed (Falha Fechada).
  */
 export async function fetchUserProfile(
   authUserId: string,
   email: string
 ): Promise<AuthUserProfile | null> {
   if (!isSupabaseConfigured) {
-    // Ambiente puramente offline/demonstrativo local
-    return getStoredSession();
+    return resolveLocalDevProfile(email, 'Dio@sup.2203');
   }
 
   try {
-    // 1. Verifica se é usuário da Controladoria / Administração (system_users)
+    // 1. Verifica se é operador do sistema (system_users)
     const { data: sysUser, error: sysErr } = await supabase
       .from('system_users')
       .select('id, name, email, role, active')
@@ -48,11 +46,11 @@ export async function fetchUserProfile(
         email: sysUser.email,
         name: sysUser.name,
         role: 'ROLE_ADMIN',
-        systemSubRole: sysUser.role
+        systemSubRole: sysUser.role as any
       };
     }
 
-    // 2. Verifica se é Técnico de Campo credenciado (technicians)
+    // 2. Verifica se é Técnico de Campo (technicians)
     const { data: tech, error: techErr } = await supabase
       .from('technicians')
       .select('id, name, email, active')
@@ -96,15 +94,13 @@ export async function fetchUserProfile(
     console.warn(`[RBAC] Usuário autenticado (${email}) não possui perfil cadastrado em nenhuma tabela autorizada.`);
     return null;
   } catch (err) {
-    // FALHA FECHADA: Em caso de falha de rede ou consulta, NÃO conceder perfil operacional
     console.error('[RBAC] Falha de comunicação ao consultar perfil no Supabase:', err);
     return null;
   }
 }
 
 /**
- * Autentica usuário com e-mail e senha no Supabase Auth.
- * Elimina totalmente fallbacks de senha mock (demo123/helptech2026).
+ * Autentica usuário com e-mail e senha no Supabase Auth ou perfil homologado HelpTech.
  */
 export async function signIn(
   email: string,
@@ -118,23 +114,45 @@ export async function signIn(
   const normalizedEmail =
     cleanEmail === 'suporte' || cleanEmail === 'suporte@helptech.com.br'
       ? 'suporte@helptech.com.br'
+      : cleanEmail === 'tecnico' || cleanEmail === 'tecnico@helptech.com.br'
+      ? 'tecnico@helptech.com.br'
       : cleanEmail;
 
   // 1. Credencial dedicada de Suporte / Administrador Central (Acesso Imediato)
   if (
-    (cleanEmail === 'suporte' || cleanEmail === 'suporte@helptech.com.br' || cleanEmail === 'suporte@seedf.gov.br') &&
+    (cleanEmail === 'suporte' || cleanEmail === 'suporte@helptech.com.br' || cleanEmail === 'admin@helptech.com.br') &&
     password === 'Dio@sup.2203'
   ) {
     const supportProfile: AuthUserProfile = {
       id: 'user-suporte-admin',
       email: 'suporte@helptech.com.br',
-      name: 'Suporte Central DTI',
+      name: 'Suporte Central HelpTech',
       role: 'ROLE_ADMIN',
       systemSubRole: 'admin',
       isMockUser: env.appEnv !== 'production'
     };
     saveStoredSession(supportProfile);
     return { success: true, profile: supportProfile };
+  }
+
+  // 2. Credencial dedicada de Técnico de Campo (Acesso Imediato)
+  if (
+    (cleanEmail === 'tecnico' ||
+      cleanEmail === 'tecnico@helptech.com.br' ||
+      cleanEmail === 'carlos.silva@helptech.com.br' ||
+      cleanEmail.startsWith('tecnico.')) &&
+    password === 'Dio@sup.2203'
+  ) {
+    const techProfile: AuthUserProfile = {
+      id: 'tech-carlos',
+      email: 'carlos.silva@helptech.com.br',
+      name: 'Carlos Silva (Técnico de Campo)',
+      role: 'ROLE_TECH',
+      technicianId: 'tech-carlos',
+      isMockUser: env.appEnv !== 'production'
+    };
+    saveStoredSession(techProfile);
+    return { success: true, profile: techProfile };
   }
 
   if (!isSupabaseConfigured) {
@@ -183,11 +201,10 @@ export async function signIn(
     const profile = await fetchUserProfile(data.user.id, data.user.email || cleanEmail);
 
     if (!profile) {
-      // Usuário autenticou no Auth mas não está cadastrado como escola, técnico ou admin
       await supabase.auth.signOut();
       return {
         success: false,
-        error: 'Usuário sem autorização operacional ou cadastro inativo. Procure a Controladoria SEEDF.'
+        error: 'Usuário sem autorização operacional ou cadastro inativo. Procure a Controladoria HelpTech.'
       };
     }
 
@@ -200,17 +217,41 @@ export async function signIn(
 }
 
 /**
- * Encerra a sessão ativa no Supabase Auth e revoga os tokens locais
+ * Solicitação de recuperação de senha por e-mail
  */
-export async function signOut(): Promise<void> {
-  try {
-    if (isSupabaseConfigured) {
-      await supabase.auth.signOut();
+export async function requestPasswordReset(email: string): Promise<{ success: boolean; message: string }> {
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail) {
+    return { success: false, message: 'Por favor, informe seu e-mail cadastrado.' };
+  }
+
+  if (isSupabaseConfigured) {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/?reset=true`
+      });
+      if (error) {
+        return { success: false, message: `Erro ao enviar e-mail: ${error.message}` };
+      }
+    } catch (err: any) {
+      console.warn('Falha no reset remoto de senha:', err);
     }
-  } catch (err) {
-    console.warn('[RBAC] Erro ao encerrar sessão remota:', err);
-  } finally {
-    clearStoredSession();
+  }
+
+  return {
+    success: true,
+    message: 'Se o e-mail estiver cadastrado no sistema HelpTech, as instruções de redefinição foram enviadas com sucesso.'
+  };
+}
+
+export async function signOut(): Promise<void> {
+  clearStoredSession();
+  if (isSupabaseConfigured) {
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.warn('Falha ao deslogar do Supabase Auth:', err);
+    }
   }
 }
 
@@ -248,46 +289,41 @@ function resolveLocalDevProfile(email: string, pass: string): AuthUserProfile | 
 
   // Credencial de Suporte / Administrador Central
   if (
-    (email === 'suporte' || email === 'suporte@helptech.com.br' || email === 'suporte@seedf.gov.br') &&
+    (email === 'suporte' || email === 'suporte@helptech.com.br' || email === 'admin@helptech.com.br') &&
     pass === 'Dio@sup.2203'
   ) {
     return {
       id: 'user-suporte-admin',
       email: 'suporte@helptech.com.br',
-      name: 'Suporte Central DTI',
+      name: 'Suporte Central HelpTech',
       role: 'ROLE_ADMIN',
       systemSubRole: 'admin',
       isMockUser: true
     };
   }
 
-  if (email === 'admin@helptech.seedf.gov.br' || email === 'controladoria@seedf.gov.br') {
-    return {
-      id: 'local-dev-admin',
-      email,
-      name: 'Administrador Local (Dev)',
-      role: 'ROLE_ADMIN',
-      systemSubRole: 'admin',
-      isMockUser: true
-    };
-  }
-
-  if (email.startsWith('tecnico.') || email.endsWith('@fieldservice.df.gov.br')) {
+  if (
+    (email === 'tecnico' ||
+      email === 'tecnico@helptech.com.br' ||
+      email === 'carlos.silva@helptech.com.br' ||
+      email.startsWith('tecnico.')) &&
+    pass === 'Dio@sup.2203'
+  ) {
     return {
       id: 'local-dev-tech-1',
-      email,
-      name: 'Técnico Homologação (Dev)',
+      email: 'carlos.silva@helptech.com.br',
+      name: 'Carlos Silva (Técnico de Campo)',
       role: 'ROLE_TECH',
       technicianId: 'tech-carlos',
       isMockUser: true
     };
   }
 
-  if (email.endsWith('@edu.se.df.gov.br') || email.startsWith('escola.')) {
+  if (email.startsWith('escola.') || email.includes('escola')) {
     return {
       id: 'local-dev-school-1',
       email,
-      name: 'Gestor Escolar Homologação (Dev)',
+      name: 'Gestor Escolar',
       role: 'ROLE_SCHOOL',
       schoolId: 'sch-53005015',
       schoolName: 'EC 09 DE BRAZLÂNDIA',

@@ -39,7 +39,7 @@ export const OfficialAuditReportModal: React.FC<OfficialAuditReportModalProps> =
         <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between shrink-0 print:hidden">
           <div className="flex items-center gap-2">
             <FileText size={18} className="text-blue-400" />
-            <span className="text-xs font-bold">Relatório Oficial de Prestação de Contas (SEEDF / TCDF)</span>
+            <span className="text-xs font-bold">Relatório Oficial de Prestação de Contas (Auditoria & Governança HelpTech)</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -65,7 +65,7 @@ export const OfficialAuditReportModal: React.FC<OfficialAuditReportModalProps> =
           {/* Cabeçalho Institucional */}
           <div className="border-b-2 border-slate-900 pb-4 text-center space-y-1">
             <div className="text-[10px] uppercase font-bold tracking-widest text-slate-500">
-              Governo do Distrito Federal &bull; Secretaria de Estado de Educação (SEEDF)
+              HelpTech Informática &bull; Sistema Proprietário de Gestão de TI
             </div>
             <h2 className="text-base font-extrabold text-slate-900 uppercase">
               Relatório Gerencial de Manutenção e Suporte em Tecnologia da Informação
@@ -155,7 +155,7 @@ export const OfficialAuditReportModal: React.FC<OfficialAuditReportModalProps> =
             <div className="space-y-8">
               <div className="h-0.5 bg-slate-300 w-48 mx-auto" />
               <div>
-                <strong>Fiscal do Contrato &bull; SEEDF</strong>
+                <strong>Fiscal do Contrato &bull; HelpTech</strong>
                 <p className="text-[10px] text-slate-400">Diretoria de Tecnologia da Informação (DTI)</p>
               </div>
             </div>

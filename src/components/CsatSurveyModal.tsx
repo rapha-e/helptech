@@ -44,7 +44,7 @@ export const CsatSurveyModal: React.FC<CsatSurveyModalProps> = ({
       <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
         <div className="flex items-center justify-between pb-2 border-b">
           <div>
-            <h3 className="font-extrabold text-sm text-slate-900">Pesquisa de Satisfação SEEDF</h3>
+            <h3 className="font-extrabold text-sm text-slate-900">Pesquisa de Satisfação HelpTech</h3>
             <p className="text-[11px] text-slate-500">Ordem de Serviço: {ticketProtocol}</p>
           </div>
           <button
@@ -137,3 +137,4 @@ export const CsatSurveyModal: React.FC<CsatSurveyModalProps> = ({
     </div>
   );
 };
+

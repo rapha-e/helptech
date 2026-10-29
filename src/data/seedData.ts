@@ -41,7 +41,7 @@ export interface SystemUser {
   name: string;
   email: string;
   phone: string;
-  role: 'admin' | 'controladoria' | 'auditor_seedf';
+  role: 'admin' | 'controladoria' | 'auditor_helptech';
   active: boolean;
   created_at: string;
 }
@@ -249,7 +249,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
   {
     id: 'inv-007',
     sku: 'PER-KIT-KB-MOUSE',
-    name: 'Kit Teclado e Mouse USB ABNT2 Padrão SEEDF',
+    name: 'Kit Teclado e Mouse USB ABNT2 Padrão HelpTech',
     category: 'periferico',
     quantity_in_stock: 52,
     min_stock_alert: 12,
@@ -400,11 +400,11 @@ export const INITIAL_SYSTEM_USERS: SystemUser[] = [
     created_at: '2026-02-01T08:30:00Z'
   },
   {
-    id: 'user-seedf-1',
-    name: 'Dr. Fernando Lins (Fiscal SEEDF)',
+    id: 'user-helptech-1',
+    name: 'Dr. Fernando Lins (Fiscal HelpTech)',
     email: 'fernando.lins@se.df.gov.br',
     phone: '(61) 3901-8000',
-    role: 'auditor_seedf',
+    role: 'auditor_helptech',
     active: true,
     created_at: '2026-01-20T09:00:00Z'
   }

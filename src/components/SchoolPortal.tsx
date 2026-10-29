@@ -122,6 +122,24 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
   });
   const [selectedTrackedTicket, setSelectedTrackedTicket] = useState<Ticket | null>(null);
   const triageResult = !dismissTriage ? analyzeTicketDescription(formData.title, formData.description) : null;
+  // Leitura automática de link do WhatsApp com ?protocol=
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlProtocol = params.get('protocol');
+      if (urlProtocol) {
+        setSearchPhoneOrProtocol(urlProtocol);
+        setActiveTab('rastrear');
+        const found = tickets.find((t) => t.protocol.toLowerCase() === urlProtocol.toLowerCase());
+        if (found) {
+          setSelectedTrackedTicket(found);
+        }
+      }
+    } catch {
+      // url param fallback
+    }
+  }, [tickets]);
+
 
   // Atualiza escola quando a CRE muda (mantém escola limpa para seleção)
   const handleCreChange = (newCreId: string) => {
@@ -418,20 +436,24 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                   onClick={() => {
                     const cleanPhone = createdSuccessTicket.requester_phone.replace(/\D/g, '');
                     const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+                    const trackingLink = typeof window !== 'undefined'
+                      ? `${window.location.origin}/?protocol=${encodeURIComponent(createdSuccessTicket.protocol)}`
+                      : '';
                     const text = encodeURIComponent(
-                      `📋 *Comprovante de Chamado HelpTech*\n` +
+                      `📋 *Comprovante de Chamado — HelpTech Informática*\n\n` +
                       `*Protocolo:* ${createdSuccessTicket.protocol}\n` +
                       `*Escola:* ${createdSuccessTicket.school_name} (CRE ${createdSuccessTicket.cre_name})\n` +
-                      `*Defeito:* ${createdSuccessTicket.title}\n` +
+                      `*Problema:* ${createdSuccessTicket.title}\n` +
                       `*Status:* Em processamento de despacho\n` +
                       `*Token:* ${createdSuccessTicket.tracking_token}\n\n` +
-                      `Guarde este comprovante para acompanhar o atendimento da sua unidade.`
+                      `🔗 *Link de Acompanhamento Direto:*\n${trackingLink}\n\n` +
+                      `Guarde este comprovante para acompanhar a rota do técnico e a assinatura da sua Ordem de Serviço.`
                     );
                     window.open(`https://wa.me/${fullPhone}?text=${text}`, '_blank');
                   }}
                   className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shadow"
                 >
-                  <Phone size={14} /> Salvar no WhatsApp
+                  <Phone size={14} /> Enviar Comprovante para o WhatsApp
                 </button>
                 <button
                   onClick={() => {
@@ -803,7 +825,7 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-xs font-bold text-slate-700">
-                            Nº Patrimônio SEEDF (Opcional)
+                            Nº Patrimônio do Equipamento (Opcional)
                           </label>
                           <button
                             type="button"
@@ -1153,7 +1175,7 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                       </div>
                     ) : (
                       <p className="text-[11px] text-emerald-700 mt-0.5">
-                        Avalie a rapidez e cortesia do técnico para aprimorar o contrato SEEDF.
+                        Avalie a rapidez e cortesia do técnico para aprimorar o Contrato HelpTech.
                       </p>
                     )}
                   </div>
@@ -1367,7 +1389,7 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
           setFormData((prev) => ({ ...prev, equipment_patrimony: detectedCode }));
           setShowScanner(false);
         }}
-        title="Escanear Etiqueta de Patrimônio SEEDF"
+        title="Escanear Etiqueta de Patrimônio do Equipamento"
       />
 
       {/* MODAL DE PESQUISA DE SATISFAÇÃO CSAT */}

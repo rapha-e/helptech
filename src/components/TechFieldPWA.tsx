@@ -985,13 +985,13 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-slate-600 mb-0.5">
-                      Matrícula SEEDF / CPF *
+                      Matrícula HelpTech / CPF *
                     </label>
                     <input
                       type="text"
                       value={schoolRepDoc}
                       onChange={(e) => setSchoolRepDoc(e.target.value)}
-                      placeholder="Matrícula SEEDF"
+                      placeholder="Matrícula HelpTech"
                       className="w-full p-1.5 border rounded-lg text-xs"
                     />
                   </div>

@@ -219,7 +219,7 @@ export function calculateSlaReport(
 }
 
 /**
- * Gera arquivo CSV com os dados operacionais completos para auditoria da SEEDF
+ * Gera arquivo CSV com os dados operacionais completos para auditoria da HelpTech
  */
 export function exportOperationalReportCsv(tickets: Ticket[]): string {
   const headers = [

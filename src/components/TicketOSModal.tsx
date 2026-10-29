@@ -38,10 +38,10 @@ export const TicketOSModal: React.FC<TicketOSModalProps> = ({ ticket, onClose })
 
         {/* Conteúdo imprimível da OS */}
         <div id="printable-os" className="p-8 overflow-y-auto space-y-6 text-slate-800 bg-white">
-          {/* Cabeçalho Oficial SEEDF */}
+          {/* Cabeçalho Oficial HelpTech */}
           <div className="text-center pb-6 border-b-2 border-slate-900/20">
             <div className="inline-block px-3 py-1 bg-blue-50 text-blue-900 rounded-full text-xs font-bold tracking-wider uppercase mb-2">
-              Governo do Distrito Federal • Secretaria de Educação (SEEDF)
+              Governo do Distrito Federal • Secretaria de Educação (HelpTech)
             </div>
             <h1 className="text-xl font-black text-slate-900 uppercase tracking-tight">
               ORDEM DE SERVIÇO & TERMO DE CONFORMIDADE TÉCNICA
@@ -102,7 +102,7 @@ export const TicketOSModal: React.FC<TicketOSModalProps> = ({ ticket, onClose })
               </div>
               {ticket.equipment_patrimony && (
                 <div className="col-span-2">
-                  <span className="text-slate-500">Nº de Patrimônio SEEDF:</span>{' '}
+                  <span className="text-slate-500">Nº de Patrimônio do Equipamento:</span>{' '}
                   <strong className="font-mono text-slate-800">{ticket.equipment_patrimony}</strong>
                 </div>
               )}

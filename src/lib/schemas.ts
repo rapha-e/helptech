@@ -49,7 +49,7 @@ export const ticketCompletionSchema = z.object({
     .min(3, 'Nome completo do gestor escolar que conferiu o serviço'),
   school_representative_doc: z
     .string()
-    .min(5, 'Informe a Matrícula SEEDF ou CPF do responsável escolar'),
+    .min(5, 'Informe a Matrícula HelpTech ou CPF do responsável escolar'),
   signature_svg: z
     .string()
     .min(10, 'A assinatura digital na tela é obrigatória para encerramento da OS')
