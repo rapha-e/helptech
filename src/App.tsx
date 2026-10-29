@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAppStore } from './lib/store';
+import { env } from './lib/env';
 import { SchoolPortal } from './components/SchoolPortal';
 import { TechFieldPWA } from './components/TechFieldPWA';
 import { CentralAdminDashboard } from './components/CentralAdminDashboard';
@@ -82,7 +83,7 @@ export const App: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col bg-slate-100 text-slate-800">
       {/* AVISO DE AMBIENTE LOCAL / DEMONSTRAÇÃO SE APLICÁVEL */}
-      {currentUser?.isMockUser && (
+      {env.appEnv !== 'production' && currentUser?.isMockUser && (
         <div className="bg-amber-500 text-slate-900 px-4 py-1.5 text-xs font-bold flex items-center justify-center gap-2 shadow-sm border-b border-amber-600">
           <AlertTriangle size={15} />
           <span>AMBIENTE DE TESTES / SESSÃO LOCAL — Dados operacionais isolados. Não aplicável em produção.</span>

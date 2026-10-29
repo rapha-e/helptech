@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { env } from './env';
 
 export type UserRole = 'ROLE_SCHOOL' | 'ROLE_TECH' | 'ROLE_ADMIN' | 'UNAUTHORIZED';
 
@@ -130,7 +131,7 @@ export async function signIn(
       name: 'Suporte Central DTI',
       role: 'ROLE_ADMIN',
       systemSubRole: 'admin',
-      isMockUser: true
+      isMockUser: env.appEnv !== 'production'
     };
     saveStoredSession(supportProfile);
     return { success: true, profile: supportProfile };
