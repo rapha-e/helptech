@@ -35,7 +35,8 @@ import {
   fetchRemoteTechnicians,
   fetchRemoteSystemUsers,
   fetchRemoteCategories,
-  fetchRemoteRegions
+  fetchRemoteRegions,
+  saveRemoteTechnicianWithAuth
 } from './masterDataService';
 import { validateStateTransition } from './stateMachine';
 
@@ -1189,19 +1190,42 @@ export function useAppStore() {
   /**
    * 13. CRUD de Técnicos de Campo
    */
-  const createTechnician = (techData: Omit<Technician, 'id'>) => {
+  const createTechnician = async (techData: Omit<Technician, 'id'> & { password?: string }) => {
+    const tempId = `tech-${Date.now().toString(36)}`;
     const newTech: Technician = {
       ...techData,
-      id: `tech-${Date.now().toString(36)}`
+      id: tempId
     };
     setTechnicians((prev) => [newTech, ...prev]);
+
+    if (isSupabaseConfigured) {
+      try {
+        const res = await saveRemoteTechnicianWithAuth(techData);
+        if (res.data) {
+          setTechnicians((prev) =>
+            prev.map((t) => (t.id === tempId ? { ...t, ...res.data } : t))
+          );
+          return res.data;
+        }
+      } catch (err) {
+        console.warn('Erro ao salvar técnico no banco:', err);
+      }
+    }
     return newTech;
   };
 
-  const updateTechnician = (id: string, updates: Partial<Technician>) => {
+  const updateTechnician = async (id: string, updates: Partial<Technician> & { password?: string }) => {
     setTechnicians((prev) =>
       prev.map((tech) => (tech.id === id ? { ...tech, ...updates } : tech))
     );
+
+    if (isSupabaseConfigured) {
+      try {
+        await saveRemoteTechnicianWithAuth({ id, ...updates });
+      } catch (err) {
+        console.warn('Erro ao atualizar técnico no banco:', err);
+      }
+    }
   };
 
   const deleteTechnician = (id: string) => {

@@ -93,6 +93,41 @@ export async function fetchRemoteTechnicians(): Promise<RemoteServiceResult<Tech
 }
 
 /**
+ * Salva ou atualiza técnico de campo com senha de autenticação atômica no Supabase
+ */
+export async function saveRemoteTechnicianWithAuth(
+  techData: Partial<Technician> & { password?: string }
+): Promise<RemoteServiceResult<Technician>> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: null, error: 'Supabase não configurado', fromFallback: true };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('save_technician_with_auth', {
+      p_id: techData.id && !techData.id.startsWith('tech-') ? techData.id : null,
+      p_name: techData.name,
+      p_phone: techData.phone,
+      p_email: techData.email,
+      p_primary_cre_id: techData.primary_cre_id || null,
+      p_latitude: techData.latitude ?? -15.793889,
+      p_longitude: techData.longitude ?? -47.882778,
+      p_radius_km: techData.radius_km || 30,
+      p_max_active_tickets: techData.max_active_tickets || 4,
+      p_status: techData.status || 'disponivel',
+      p_password: techData.password || null
+    });
+
+    if (error) {
+      return { data: null, error: error.message, fromFallback: false };
+    }
+
+    return { data: data as Technician, error: null, fromFallback: false };
+  } catch (err: any) {
+    return { data: null, error: err.message, fromFallback: true };
+  }
+}
+
+/**
  * Consulta lista de usuários administrativos (RBAC)
  */
 export async function fetchRemoteSystemUsers(): Promise<RemoteServiceResult<SystemUser[]>> {

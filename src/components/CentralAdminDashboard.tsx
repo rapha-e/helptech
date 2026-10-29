@@ -56,8 +56,8 @@ interface CentralAdminDashboardProps {
   onManualDispatch: (ticketId: string, techId: string) => void;
   onDecideQuote: (ticketId: string, approved: boolean, name: string, reason?: string) => void;
   onViewOS: (ticket: Ticket) => void;
-  onCreateTechnician?: (tech: Omit<Technician, 'id'>) => void;
-  onUpdateTechnician?: (id: string, tech: Partial<Technician>) => void;
+  onCreateTechnician?: (tech: Omit<Technician, 'id'> & { password?: string }) => void;
+  onUpdateTechnician?: (id: string, tech: Partial<Technician> & { password?: string }) => void;
   onDeleteTechnician?: (id: string) => void;
   onToggleTechnicianStatus?: (id: string) => void;
   onCreateSystemUser?: (user: Omit<SystemUser, 'id' | 'created_at'>) => void;
@@ -120,6 +120,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
     name: '',
     phone: '',
     email: '',
+    password: '',
     primary_cre_id: 'cre-tagu',
     latitude: -15.8340,
     longitude: -48.0560,
@@ -149,6 +150,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
         name: tech.name,
         phone: tech.phone,
         email: tech.email,
+        password: '',
         primary_cre_id: tech.primary_cre_id,
         latitude: tech.latitude,
         longitude: tech.longitude,
@@ -163,6 +165,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
         name: '',
         phone: '',
         email: '',
+        password: '',
         primary_cre_id: regions[0]?.id || 'cre-tagu',
         latitude: -15.7940,
         longitude: -47.8820,
@@ -181,18 +184,26 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
       alert('Por favor, preencha todos os campos obrigatórios.');
       return;
     }
+
+    if (!editingTech && (!techForm.password || techForm.password.trim().length < 6)) {
+      alert('A senha de acesso do novo técnico deve ter no mínimo 6 caracteres.');
+      return;
+    }
+
     const regionObj = regions.find((r) => r.id === techForm.primary_cre_id);
     const primary_cre_name = regionObj ? regionObj.name : 'Plano Piloto';
 
     if (editingTech && onUpdateTechnician) {
       onUpdateTechnician(editingTech.id, {
         ...techForm,
-        primary_cre_name
+        primary_cre_name,
+        password: techForm.password ? techForm.password : undefined
       });
     } else if (onCreateTechnician) {
       onCreateTechnician({
         ...techForm,
-        primary_cre_name
+        primary_cre_name,
+        password: techForm.password
       });
     }
     setShowTechModal(false);
@@ -1614,6 +1625,24 @@ $$ LANGUAGE plpgsql;`}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  {editingTech ? 'Redefinir Senha de Acesso (Opcional)' : 'Senha de Acesso ao PWA *'}
+                </label>
+                <input
+                  type="password"
+                  required={!editingTech}
+                  minLength={6}
+                  value={techForm.password}
+                  onChange={(e) => setTechForm({ ...techForm, password: e.target.value })}
+                  placeholder={editingTech ? 'Deixe em branco para manter a atual' : 'Mínimo 6 caracteres (Ex: Tecnico@2026)'}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                />
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  Esta senha será usada pelo técnico para fazer login no PWA de Campo.
+                </p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
