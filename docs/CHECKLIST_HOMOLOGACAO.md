@@ -1,6 +1,6 @@
 # CHECKLIST DE HOMOLOGAÇÃO & PILOTO — HELPTECH ESCOLAS DF
 
-Este documento consolida a matriz de verificação de qualidade para a entrada em operação piloto e homologação oficial da plataforma junto à Secretaria de Educação do Distrito Federal (SEEDF).
+Este documento consolida a matriz de verificação de qualidade para a entrada em operação piloto e homologação oficial da plataforma para conformidade operacional e auditoria técnica HelpTech.
 
 ---
 

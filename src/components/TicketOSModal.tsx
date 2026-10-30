@@ -41,13 +41,13 @@ export const TicketOSModal: React.FC<TicketOSModalProps> = ({ ticket, onClose })
           {/* Cabeçalho Oficial HelpTech */}
           <div className="text-center pb-6 border-b-2 border-slate-900/20">
             <div className="inline-block px-3 py-1 bg-blue-50 text-blue-900 rounded-full text-xs font-bold tracking-wider uppercase mb-2">
-              Governo do Distrito Federal • Secretaria de Educação (HelpTech)
+              HelpTech Informática • Gestão de Atendimento & Suporte Técnico Especializado
             </div>
             <h1 className="text-xl font-black text-slate-900 uppercase tracking-tight">
               ORDEM DE SERVIÇO & TERMO DE CONFORMIDADE TÉCNICA
             </h1>
             <p className="text-xs text-slate-500 mt-1">
-              Programa de Manutenção e Suporte Tecnológico das Unidades Escolares do DF
+              Plataforma Corporativa de Manutenção e Suporte Tecnológico de TI
             </p>
             <div className="mt-4 flex items-center justify-center gap-6 text-sm">
               <span className="font-mono font-bold bg-slate-100 px-3 py-1 rounded border border-slate-300">
@@ -230,7 +230,7 @@ export const TicketOSModal: React.FC<TicketOSModalProps> = ({ ticket, onClose })
           {/* Rodapé de autenticidade */}
           <div className="pt-4 text-center text-[10px] text-slate-400 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-2">
             <span>Token de Autenticidade: <strong className="font-mono text-slate-600">{ticket.tracking_token}</strong></span>
-            <span>Sistema Integrado de Suporte e Governança • HelpTech Escolas DF</span>
+            <span>Sistema Integrado de Suporte e Governança • HelpTech Informática</span>
           </div>
         </div>
       </div>

@@ -504,3 +504,65 @@ export async function completeTicketRemote(
   });
 }
 
+/**
+ * Executa edição administrativa completa da OS (etapa, status, técnico, título, descrição, urgência, patrimônio, notas)
+ */
+export async function adminUpdateTicketRemote(
+  ticketId: string,
+  params: {
+    status?: string;
+    technicianId?: string;
+    title?: string;
+    description?: string;
+    urgencyLevel?: string;
+    equipmentPatrimony?: string;
+    notes?: string;
+  }
+): Promise<RemoteServiceResult<any>> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: null, error: null, fromFallback: true };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('admin_update_ticket', {
+      p_ticket_id: ticketId,
+      p_status: params.status || null,
+      p_technician_id: params.technicianId !== undefined ? (params.technicianId || null) : null,
+      p_title: params.title || null,
+      p_description: params.description || null,
+      p_urgency_level: params.urgencyLevel || null,
+      p_equipment_patrimony: params.equipmentPatrimony || null,
+      p_notes: params.notes || null
+    });
+
+    if (error) {
+      console.warn('Falha na RPC admin_update_ticket, executando fallback direto na tabela:', error.message);
+      const patch: Record<string, any> = { updated_at: new Date().toISOString() };
+      if (params.status) patch.status = params.status;
+      if (params.technicianId !== undefined) patch.assigned_technician_id = params.technicianId || null;
+      if (params.title) patch.title = params.title;
+      if (params.description) patch.description = params.description;
+      if (params.urgencyLevel) patch.urgency_level = params.urgencyLevel;
+      if (params.equipmentPatrimony !== undefined) patch.equipment_patrimony = params.equipmentPatrimony || null;
+
+      const { data: directData, error: directError } = await supabase
+        .from('tickets')
+        .update(patch)
+        .eq('id', ticketId)
+        .select()
+        .single();
+
+      if (directError) {
+        return { data: null, error: directError.message, fromFallback: true };
+      }
+      return { data: directData, error: null, fromFallback: false };
+    }
+
+    return { data, error: null, fromFallback: false };
+  } catch (err: any) {
+    console.error('Falha de rede ao executar adminUpdateTicketRemote:', err);
+    return { data: null, error: err.message || 'Erro inesperado', fromFallback: true };
+  }
+}
+
+

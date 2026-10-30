@@ -28,7 +28,8 @@ import { isSupabaseConfigured, supabase } from './supabaseClient';
 import {
   fetchRemoteTickets,
   createRemoteTicket,
-  updateRemoteTicketStatus
+  updateRemoteTicketStatus,
+  adminUpdateTicketRemote
 } from './ticketService';
 import {
   fetchRemoteSchools,
@@ -1132,6 +1133,92 @@ export function useAppStore() {
   /**
    * 12. Central de Controle: Despacho manual direto
    */
+
+  /**
+   * 12.1 Central de Controle: Edição administrativa completa da OS e transição livre de etapas / troca de técnico
+   */
+  const updateTicketAdmin = async (
+    ticketId: string,
+    params: {
+      status?: Ticket['status'];
+      technicianId?: string;
+      title?: string;
+      description?: string;
+      urgencyLevel?: Ticket['urgency_level'];
+      equipmentPatrimony?: string;
+      notes?: string;
+    }
+  ) => {
+    let resolvedTechName: string | undefined = undefined;
+    if (params.technicianId !== undefined) {
+      if (!params.technicianId) {
+        resolvedTechName = '';
+      } else {
+        const found = technicians.find((t) => t.id === params.technicianId);
+        resolvedTechName = found ? found.name : '';
+      }
+    }
+
+    setTickets((prev) =>
+      prev.map((t) => {
+        if (t.id === ticketId) {
+          const nextStatus = params.status || t.status;
+          const nextTechId =
+            params.technicianId !== undefined
+              ? (params.technicianId || undefined)
+              : t.assigned_technician_id;
+          const nextTechName =
+            resolvedTechName !== undefined
+              ? resolvedTechName
+              : t.assigned_technician_name;
+
+          const updatedLogs = [...t.dispatch_logs];
+          if (
+            params.technicianId &&
+            params.technicianId !== t.assigned_technician_id &&
+            resolvedTechName
+          ) {
+            updatedLogs.push({
+              id: `log-admin-${Date.now()}`,
+              ticket_id: t.id,
+              technician_id: params.technicianId,
+              technician_name: resolvedTechName,
+              status: 'notificado',
+              created_at: new Date().toISOString()
+            });
+          }
+
+          return {
+            ...t,
+            status: nextStatus,
+            assigned_technician_id: nextTechId,
+            assigned_technician_name: nextTechName,
+            title: params.title ?? t.title,
+            description: params.description ?? t.description,
+            urgency_level: params.urgencyLevel ?? t.urgency_level,
+            equipment_patrimony:
+              params.equipmentPatrimony !== undefined
+                ? params.equipmentPatrimony
+                : t.equipment_patrimony,
+            dispatch_logs: updatedLogs,
+            updated_at: new Date().toISOString()
+          };
+        }
+        return t;
+      })
+    );
+
+    await adminUpdateTicketRemote(ticketId, {
+      status: params.status,
+      technicianId: params.technicianId,
+      title: params.title,
+      description: params.description,
+      urgencyLevel: params.urgencyLevel,
+      equipmentPatrimony: params.equipmentPatrimony,
+      notes: params.notes
+    });
+  };
+
   const manualDispatch = (ticketId: string, technicianId: string) => {
     const tech = technicians.find((t) => t.id === technicianId);
     if (!tech) return;
@@ -1372,6 +1459,7 @@ export function useAppStore() {
     setWaitingThirdParty,
     resumeService,
     manualDispatch,
+    updateTicketAdmin,
     createTechnician,
     updateTechnician,
     deleteTechnician,

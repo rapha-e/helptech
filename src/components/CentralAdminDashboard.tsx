@@ -64,11 +64,41 @@ interface CentralAdminDashboardProps {
   onUpdateSystemUser?: (id: string, user: Partial<SystemUser> & { password?: string }) => void;
   onDeleteSystemUser?: (id: string) => void;
   onToggleSystemUserActive?: (id: string) => void;
+  onAdminUpdateTicket?: (
+    ticketId: string,
+    params: {
+      status?: Ticket['status'];
+      technicianId?: string;
+      title?: string;
+      description?: string;
+      urgencyLevel?: Ticket['urgency_level'];
+      equipmentPatrimony?: string;
+      notes?: string;
+    }
+  ) => void;
   onResetDatabase: () => void;
   inventory?: InventoryItem[];
   onUpdateInventoryQuantity?: (id: string, delta: number) => void;
   onAddInventoryItem?: (item: Omit<InventoryItem, 'id'>) => void;
 }
+
+
+export const KANBAN_STAGES_FLOW: {
+  status: Ticket['status'];
+  label: string;
+  stepNumber: number;
+}[] = [
+  { status: 'aberto', label: '1. Triagem / Aberto', stepNumber: 1 },
+  { status: 'despachado', label: '2. Despachado (Timeout 20m)', stepNumber: 2 },
+  { status: 'visita_agendada', label: '3. Visita Agendada', stepNumber: 3 },
+  { status: 'em_deslocamento', label: '4. Em Rota / Deslocamento', stepNumber: 4 },
+  { status: 'em_atendimento', label: '5. Em Atendimento Presencial', stepNumber: 5 },
+  { status: 'aguardando_orcamento', label: '6. Aguardando Orçamento', stepNumber: 6 },
+  { status: 'aguardando_peca', label: '7. Aguardando Peça', stepNumber: 7 },
+  { status: 'aguardando_terceiro', label: '8. Aguardando Terceiro', stepNumber: 8 },
+  { status: 'concluido', label: '9. Concluído & Assinado', stepNumber: 9 },
+  { status: 'cancelado', label: '10. Cancelado', stepNumber: 10 }
+];
 
 export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   tickets,
@@ -88,6 +118,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   onUpdateSystemUser,
   onDeleteSystemUser,
   onToggleSystemUserActive,
+  onAdminUpdateTicket,
   onResetDatabase,
   inventory = [],
   onUpdateInventoryQuantity = () => {},
@@ -101,7 +132,81 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
 
   // Estado para simulação de despacho
   const [simSchoolId, setSimSchoolId] = useState<string>(schools[0]?.id || '');
-  const [manualDispatchTechId, setManualDispatchTechId] = useState<Record<string, string>>({});
+
+  // Estados para Edição Administrativa da OS e Transição de Etapas
+  const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
+  const [showEditTicketModal, setShowEditTicketModal] = useState(false);
+  const [cardTechSelect, setCardTechSelect] = useState<Record<string, string>>({});
+  const [changingTechTicketId, setChangingTechTicketId] = useState<string | null>(null);
+  const [editTicketForm, setEditTicketForm] = useState<{
+    status: Ticket['status'];
+    technicianId: string;
+    title: string;
+    description: string;
+    urgencyLevel: Ticket['urgency_level'];
+    equipmentPatrimony: string;
+    notes: string;
+  }>({
+    status: 'aberto',
+    technicianId: '',
+    title: '',
+    description: '',
+    urgencyLevel: 'media',
+    equipmentPatrimony: '',
+    notes: ''
+  });
+
+  const handleOpenEditTicketModal = (ticket: Ticket) => {
+    setEditingTicket(ticket);
+    setEditTicketForm({
+      status: ticket.status,
+      technicianId: ticket.assigned_technician_id || '',
+      title: ticket.title,
+      description: ticket.description,
+      urgencyLevel: ticket.urgency_level,
+      equipmentPatrimony: ticket.equipment_patrimony || '',
+      notes: ''
+    });
+    setShowEditTicketModal(true);
+  };
+
+  const handleSaveEditTicket = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTicket) return;
+    if (onAdminUpdateTicket) {
+      onAdminUpdateTicket(editingTicket.id, {
+        status: editTicketForm.status,
+        technicianId: editTicketForm.technicianId,
+        title: editTicketForm.title.trim(),
+        description: editTicketForm.description.trim(),
+        urgencyLevel: editTicketForm.urgencyLevel,
+        equipmentPatrimony: editTicketForm.equipmentPatrimony.trim(),
+        notes: editTicketForm.notes.trim()
+      });
+    } else {
+      if (editTicketForm.technicianId && editTicketForm.technicianId !== editingTicket.assigned_technician_id) {
+        onManualDispatch(editingTicket.id, editTicketForm.technicianId);
+      }
+    }
+    setShowEditTicketModal(false);
+    setEditingTicket(null);
+  };
+
+  const handleQuickAssignOrSwapTech = (ticketId: string, technicianId: string) => {
+    if (onAdminUpdateTicket) {
+      onAdminUpdateTicket(ticketId, { technicianId });
+    } else {
+      onManualDispatch(ticketId, technicianId);
+    }
+    setChangingTechTicketId(null);
+  };
+
+  const handleQuickMoveStage = (ticket: Ticket, targetStatus: Ticket['status']) => {
+    if (onAdminUpdateTicket) {
+      onAdminUpdateTicket(ticket.id, { status: targetStatus });
+    }
+  };
+
 
   // Estados para Decisão de Orçamento (Aprovação ou Reprovação/Cancelamento)
   const [rejectingQuoteTicket, setRejectingQuoteTicket] = useState<Ticket | null>(null);
@@ -636,48 +741,159 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                         );
                       })()}
 
-                      {ticket.assigned_technician_name && (
-                        <div className="text-[10px] bg-slate-50 p-1.5 rounded-lg border border-slate-100 text-slate-600 truncate">
-                          Técnico: <strong>{ticket.assigned_technician_name}</strong>
-                        </div>
-                      )}
+                      {/* Gestão Universal de Técnico Atribuído */}
+                      <div className="pt-2 border-t border-slate-100">
+                        {ticket.assigned_technician_name ? (
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between gap-1 text-[10px] bg-slate-50 p-1.5 rounded-lg border border-slate-200">
+                              <div className="truncate text-slate-700">
+                                <span className="text-slate-400 font-semibold">Técnico:</span>{' '}
+                                <strong className="text-slate-900">{ticket.assigned_technician_name}</strong>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setChangingTechTicketId(
+                                    changingTechTicketId === ticket.id ? null : ticket.id
+                                  )
+                                }
+                                className="px-1.5 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[9px] font-bold shrink-0 transition-colors"
+                              >
+                                {changingTechTicketId === ticket.id ? 'Fechar' : 'Trocar'}
+                              </button>
+                            </div>
 
-                      {/* Despacho Manual para chamados abertos/sem técnico */}
-                      {ticket.status === 'aberto' && (
-                        <div className="pt-2 border-t border-slate-100 space-y-1">
-                          <label className="text-[10px] font-bold text-slate-500 block">
-                            Triagem Manual de Exceção:
-                          </label>
-                          <div className="flex gap-1">
-                            <select
-                              value={manualDispatchTechId[ticket.id] || technicians[0]?.id}
-                              onChange={(e) =>
-                                setManualDispatchTechId({
-                                  ...manualDispatchTechId,
-                                  [ticket.id]: e.target.value
-                                })
-                              }
-                              className="text-[10px] p-1 border rounded bg-slate-50 flex-1 truncate"
-                            >
-                              {technicians.map((t) => (
-                                <option key={t.id} value={t.id}>
-                                  {t.name} ({t.primary_cre_name})
-                                </option>
-                              ))}
-                            </select>
-                            <button
-                              onClick={() => {
-                                const techId =
-                                  manualDispatchTechId[ticket.id] || technicians[0]?.id;
-                                onManualDispatch(ticket.id, techId);
-                              }}
-                              className="px-2 py-1 bg-blue-600 text-white rounded text-[10px] font-bold"
-                            >
-                              Despachar
-                            </button>
+                            {changingTechTicketId === ticket.id && (
+                              <div className="p-2 bg-blue-50/70 border border-blue-200 rounded-lg space-y-1.5 animate-fadeIn">
+                                <label className="text-[10px] font-bold text-blue-900 block">
+                                  Trocar Técnico da OS em Andamento:
+                                </label>
+                                <div className="flex gap-1">
+                                  <select
+                                    value={
+                                      cardTechSelect[ticket.id] ||
+                                      ticket.assigned_technician_id ||
+                                      technicians[0]?.id ||
+                                      ''
+                                    }
+                                    onChange={(e) =>
+                                      setCardTechSelect({
+                                        ...cardTechSelect,
+                                        [ticket.id]: e.target.value
+                                      })
+                                    }
+                                    className="text-[10px] p-1 border rounded bg-white flex-1 truncate text-slate-800"
+                                  >
+                                    {technicians.map((t) => (
+                                      <option key={t.id} value={t.id}>
+                                        {t.name} ({t.primary_cre_name})
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const techId =
+                                        cardTechSelect[ticket.id] ||
+                                        ticket.assigned_technician_id ||
+                                        technicians[0]?.id;
+                                      if (techId) handleQuickAssignOrSwapTech(ticket.id, techId);
+                                    }}
+                                    className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-[10px] font-bold shrink-0 shadow-xs"
+                                  >
+                                    Salvar
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      )}
+                        ) : (
+                          <div className="space-y-1.5 bg-amber-50 p-2 rounded-lg border border-amber-300">
+                            <div className="flex items-center gap-1 text-[10px] font-bold text-amber-900">
+                              <AlertTriangle size={12} className="text-amber-600 shrink-0" />
+                              <span>⚠️ Sem Técnico Atribuído</span>
+                            </div>
+                            <div className="flex gap-1">
+                              <select
+                                value={cardTechSelect[ticket.id] || technicians[0]?.id || ''}
+                                onChange={(e) =>
+                                  setCardTechSelect({
+                                    ...cardTechSelect,
+                                    [ticket.id]: e.target.value
+                                  })
+                                }
+                                className="text-[10px] p-1 border border-amber-300 rounded bg-white flex-1 truncate text-slate-800"
+                              >
+                                {technicians.map((t) => (
+                                  <option key={t.id} value={t.id}>
+                                    {t.name} ({t.primary_cre_name})
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const techId = cardTechSelect[ticket.id] || technicians[0]?.id;
+                                  if (techId) handleQuickAssignOrSwapTech(ticket.id, techId);
+                                }}
+                                className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-[10px] font-bold shrink-0 shadow-xs"
+                              >
+                                Atribuir
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Controle de Etapas da OS (Avançar e Retornar) */}
+                      {(() => {
+                        const currentIdx = KANBAN_STAGES_FLOW.findIndex(
+                          (s) => s.status === ticket.status
+                        );
+                        const currentStage = KANBAN_STAGES_FLOW[currentIdx] || {
+                          label: ticket.status,
+                          stepNumber: currentIdx + 1
+                        };
+                        const prevStage = currentIdx > 0 ? KANBAN_STAGES_FLOW[currentIdx - 1] : null;
+                        const nextStage =
+                          currentIdx >= 0 && currentIdx < KANBAN_STAGES_FLOW.length - 1
+                            ? KANBAN_STAGES_FLOW[currentIdx + 1]
+                            : null;
+
+                        return (
+                          <div className="pt-1.5 space-y-1">
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="text-slate-400 font-semibold">Etapa:</span>
+                              <span
+                                className="font-bold text-slate-700 truncate max-w-[130px]"
+                                title={currentStage.label}
+                              >
+                                {currentStage.label}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-1">
+                              <button
+                                type="button"
+                                disabled={!prevStage}
+                                onClick={() => prevStage && handleQuickMoveStage(ticket, prevStage.status)}
+                                className="py-1 px-1.5 text-[9px] font-bold bg-slate-100 hover:bg-slate-200 disabled:opacity-40 disabled:hover:bg-slate-100 text-slate-700 rounded border border-slate-200 flex items-center justify-center gap-1 transition-colors"
+                                title={prevStage ? `Retornar para: ${prevStage.label}` : 'Primeira etapa'}
+                              >
+                                ◀ Retornar
+                              </button>
+                              <button
+                                type="button"
+                                disabled={!nextStage}
+                                onClick={() => nextStage && handleQuickMoveStage(ticket, nextStage.status)}
+                                className="py-1 px-1.5 text-[9px] font-bold bg-blue-50 hover:bg-blue-100 disabled:opacity-40 disabled:hover:bg-blue-50 text-blue-700 rounded border border-blue-200 flex items-center justify-center gap-1 transition-colors"
+                                title={nextStage ? `Avançar para: ${nextStage.label}` : 'Última etapa'}
+                              >
+                                Avançar ▶
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Decisão rápida de Orçamento no Kanban */}
                       {ticket.status === 'aguardando_orcamento' && ticket.quote && ticket.quote.status === 'pendente' && (
@@ -708,12 +924,22 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                         </div>
                       )}
 
-                      <button
-                        onClick={() => onViewOS(ticket)}
-                        className="w-full text-center text-[10px] font-semibold text-blue-600 hover:text-blue-800 pt-1 block"
-                      >
-                        Abrir Ordem de Serviço →
-                      </button>
+                      <div className="pt-2 border-t border-slate-100 flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditTicketModal(ticket)}
+                          className="flex-1 py-1 px-2 text-center text-[10px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded transition-colors flex items-center justify-center gap-1"
+                        >
+                          <Edit size={11} className="text-slate-500" /> Editar OS
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onViewOS(ticket)}
+                          className="flex-1 py-1 px-2 text-center text-[10px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded transition-colors truncate"
+                        >
+                          Ver OS Oficial →
+                        </button>
+                      </div>
                     </div>
                   ))}
 
@@ -1895,6 +2121,181 @@ $$ LANGUAGE plpgsql;`}
           </div>
         </div>
       )}
+
+      {/* MODAL DE EDIÇÃO COMPLETA DE ORDEM DE SERVIÇO (OS) */}
+      {showEditTicketModal && editingTicket && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 max-h-[90vh] flex flex-col">
+            <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <Wrench size={18} className="text-blue-400" />
+                <div>
+                  <h3 className="font-bold text-sm">
+                    Editar Ordem de Serviço &bull; {editingTicket.protocol}
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    {editingTicket.school_name} &bull; CRE {editingTicket.cre_name}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowEditTicketModal(false);
+                  setEditingTicket(null);
+                }}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditTicket} className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+              {/* Etapa / Status da OS */}
+              <div className="bg-blue-50/70 p-3 rounded-xl border border-blue-200 space-y-1">
+                <label className="block font-bold text-blue-950">
+                  Etapa do Fluxo Operacional (Avançar / Retornar) *
+                </label>
+                <select
+                  value={editTicketForm.status}
+                  onChange={(e) =>
+                    setEditTicketForm({
+                      ...editTicketForm,
+                      status: e.target.value as Ticket['status']
+                    })
+                  }
+                  className="w-full px-3 py-2 bg-white border border-blue-300 rounded-xl font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {KANBAN_STAGES_FLOW.map((s) => (
+                    <option key={s.status} value={s.status}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-blue-700">
+                  Você pode avançar ou retornar a OS para qualquer uma das 10 etapas operacionais homologadas.
+                </p>
+              </div>
+
+              {/* Técnico Atribuído */}
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
+                <label className="block font-bold text-slate-800">
+                  Técnico Responsável (Atribuir / Trocar em Andamento)
+                </label>
+                <select
+                  value={editTicketForm.technicianId}
+                  onChange={(e) =>
+                    setEditTicketForm({ ...editTicketForm, technicianId: e.target.value })
+                  }
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">-- Sem Técnico (Não Atribuído) --</option>
+                  {technicians.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} &bull; CRE {t.primary_cre_name} ({t.status})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-500">
+                  Permite despachar novo técnico ou substituir o profissional atualmente em rota/campo.
+                </p>
+              </div>
+
+              {/* Título */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Título do Chamado *</label>
+                <input
+                  type="text"
+                  required
+                  value={editTicketForm.title}
+                  onChange={(e) => setEditTicketForm({ ...editTicketForm, title: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Descrição */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Descrição Detalhada do Defeito *</label>
+                <textarea
+                  required
+                  rows={3}
+                  value={editTicketForm.description}
+                  onChange={(e) => setEditTicketForm({ ...editTicketForm, description: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+
+              {/* Urgência e Patrimônio em Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Nível de Urgência *</label>
+                  <select
+                    value={editTicketForm.urgencyLevel}
+                    onChange={(e) =>
+                      setEditTicketForm({
+                        ...editTicketForm,
+                        urgencyLevel: e.target.value as Ticket['urgency_level']
+                      })
+                    }
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="baixa">Baixa (SLA 48h)</option>
+                    <option value="media">Média (SLA 24h)</option>
+                    <option value="alta">Alta (SLA 12h)</option>
+                    <option value="critica">Crítica (SLA 4h)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Patrimônio / Etiqueta</label>
+                  <input
+                    type="text"
+                    value={editTicketForm.equipmentPatrimony}
+                    onChange={(e) =>
+                      setEditTicketForm({ ...editTicketForm, equipmentPatrimony: e.target.value })
+                    }
+                    placeholder="Ex: PAT-49921"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Observações Administrativas */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Justificativa / Observações da Modificação
+                </label>
+                <textarea
+                  rows={2}
+                  value={editTicketForm.notes}
+                  onChange={(e) => setEditTicketForm({ ...editTicketForm, notes: e.target.value })}
+                  placeholder="Ex: OS retornada para revisão técnica após diagnóstico de laboratório."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditTicketModal(false);
+                    setEditingTicket(null);
+                  }}
+                  className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl font-bold transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-colors shadow-sm"
+                >
+                  Salvar Alterações da OS
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* MODAL DE JUSTIFICATIVA PARA REPROVAR ORÇAMENTO E CANCELAR CHAMADO */}
       {rejectingQuoteTicket && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">

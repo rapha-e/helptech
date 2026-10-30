@@ -40,7 +40,7 @@ O script completo DDL está localizado em [`supabase/schema.sql`](file:///c:/Use
 * Extensões: `uuid-ossp`, `cube` e `earthdistance`.
 * Tabelas: `regional_coordinations`, `schools`, `technicians`, `ticket_categories`, `tickets`, `ticket_dispatch_logs`, `ticket_attachments`, `ticket_quotes`, `ticket_quote_items`, `ticket_completions`.
 * Função SQL `get_best_candidate_technician(p_school_lat, p_school_lng, p_excluded_techs)`.
-* Seeds oficiais das 15 CREs e Unidades Escolares do DF.
+* Seeds operacionais das 15 CREs e Unidades Escolares.
 
 ---
 

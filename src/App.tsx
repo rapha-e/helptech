@@ -80,6 +80,7 @@ export const App: React.FC = () => {
     setWaitingThirdParty,
     resumeService,
     manualDispatch,
+    updateTicketAdmin,
     createTechnician,
     updateTechnician,
     deleteTechnician,
@@ -344,6 +345,7 @@ export const App: React.FC = () => {
                 regions={regions}
                 categories={categories}
                 onManualDispatch={manualDispatch}
+                onAdminUpdateTicket={updateTicketAdmin}
                 onDecideQuote={decideQuote}
                 onViewOS={(ticket) => setViewingOsTicket(ticket)}
                 onCreateTechnician={createTechnician}
@@ -389,7 +391,7 @@ export const App: React.FC = () => {
       <Suspense fallback={null}>
         {viewingOsTicket && (
           <TicketOSModal
-            ticket={viewingOsTicket}
+            ticket={tickets.find((t) => t.id === viewingOsTicket.id) || viewingOsTicket}
             onClose={() => setViewingOsTicket(null)}
           />
         )}
