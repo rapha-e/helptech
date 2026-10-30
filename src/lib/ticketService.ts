@@ -2,6 +2,7 @@ import { supabase, isSupabaseConfigured } from './supabaseClient';
 import type {
   Ticket,
   TicketAttachment,
+  TicketHistoryEntry,
   TicketDispatchLog,
   School,
   TicketCategory
@@ -107,6 +108,20 @@ export function mapSupabaseRowToTicket(
     created_at: log.created_at
   }));
 
+  const history: TicketHistoryEntry[] = (row.ticket_audit_events || []).map((ev: any) => ({
+    id: ev.id,
+    created_at: ev.created_at,
+    action_type: ev.event_type || 'status_change',
+    from_status: ev.previous_status || undefined,
+    to_status: ev.new_status || undefined,
+    author_name: ev.actor_name || ev.actor_type || 'Central HelpTech',
+    author_role: ev.actor_role || ev.actor_type || 'Operador',
+    note: ev.metadata?.notes || ev.metadata?.comment || ev.metadata?.justification || undefined,
+    technician_name: ev.metadata?.technician_name || undefined
+  })).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  const latestNote = history.find((h) => h.note)?.note || row.notes || undefined;
+
   return {
     id: row.id,
     protocol: row.protocol,
@@ -143,6 +158,8 @@ export function mapSupabaseRowToTicket(
     completion,
     attachments,
     dispatch_logs,
+    history,
+    notes: latestNote,
     notifications: []
   };
 }
@@ -167,6 +184,7 @@ export async function fetchRemoteTickets(
         technicians(name),
         ticket_attachments(*),
         ticket_dispatch_logs(*),
+        ticket_audit_events(*),
         ticket_quotes(*, ticket_quote_items(*)),
         ticket_completions(*)
       `)

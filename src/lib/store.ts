@@ -6,7 +6,8 @@ import type {
   TicketCategory,
   SystemUser,
   RegionalCoordination,
-  InventoryItem
+  InventoryItem,
+  TicketHistoryEntry
 } from '../data/seedData';
 import {
   INITIAL_TICKETS,
@@ -168,8 +169,39 @@ export function useAppStore() {
         ]);
 
       if (remoteTkts.data && remoteTkts.data.length > 0) {
-        setTickets(remoteTkts.data);
-        saveStoredTickets(remoteTkts.data);
+        setTickets((prevLocal) => {
+          const localMap = new Map(prevLocal.map((t) => [t.id, t]));
+          const merged = remoteTkts.data!.map((remoteT) => {
+            const localT = localMap.get(remoteT.id);
+            if (!localT) return remoteT;
+            const remoteHist = remoteT.history || [];
+            const localHist = localT.history || [];
+            const combinedHist = [
+              ...localHist,
+              ...remoteHist.filter((rh) => !localHist.some((lh) => lh.id === rh.id))
+            ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+            return {
+              ...remoteT,
+              ...localT,
+              status: localT.status || remoteT.status,
+              assigned_technician_id: localT.assigned_technician_id ?? remoteT.assigned_technician_id,
+              assigned_technician_name: localT.assigned_technician_name ?? remoteT.assigned_technician_name,
+              notes: localT.notes || remoteT.notes,
+              history: combinedHist
+            };
+          });
+
+          // Preserva chamados criados localmente ainda não sincronizados
+          for (const localT of prevLocal) {
+            if (!merged.some((m) => m.id === localT.id)) {
+              merged.push(localT);
+            }
+          }
+
+          saveStoredTickets(merged);
+          return merged;
+        });
       }
       if (remoteSchs.data && !remoteSchs.fromFallback) {
         setSchools(remoteSchs.data);
@@ -1188,6 +1220,22 @@ export function useAppStore() {
             });
           }
 
+          const newHistEntry: TicketHistoryEntry = {
+            id: `hist-${Date.now()}`,
+            created_at: new Date().toISOString(),
+            action_type: params.notes
+              ? 'note_added'
+              : (params.status && params.status !== t.status ? 'status_change' : 'admin_edit'),
+            from_status: t.status,
+            to_status: nextStatus,
+            author_name: 'Administrador Central',
+            author_role: 'Controladoria',
+            note: params.notes || undefined,
+            technician_name: nextTechName
+          };
+
+          const combinedHistory = [newHistEntry, ...(t.history || [])];
+
           return {
             ...t,
             status: nextStatus,
@@ -1200,6 +1248,8 @@ export function useAppStore() {
               params.equipmentPatrimony !== undefined
                 ? params.equipmentPatrimony
                 : t.equipment_patrimony,
+            notes: params.notes || t.notes,
+            history: combinedHistory,
             dispatch_logs: updatedLogs,
             updated_at: new Date().toISOString()
           };
@@ -1443,6 +1493,44 @@ export function useAppStore() {
     );
   };
 
+  /**
+   * Adiciona nota ou parecer com histórico imediato na OS
+   */
+  const addTicketNote = async (ticketId: string, noteText: string, authorName = 'Administrador HelpTech') => {
+    if (!noteText.trim()) return;
+    const cleanNote = noteText.trim();
+
+    setTickets((prev) => {
+      const updated = prev.map((t) => {
+        if (t.id === ticketId) {
+          const entry: TicketHistoryEntry = {
+            id: `hist-note-${Date.now()}`,
+            created_at: new Date().toISOString(),
+            action_type: 'note_added',
+            from_status: t.status,
+            to_status: t.status,
+            author_name: authorName,
+            author_role: 'Controladoria / Auditoria',
+            note: cleanNote
+          };
+          return {
+            ...t,
+            notes: cleanNote,
+            history: [entry, ...(t.history || [])],
+            updated_at: new Date().toISOString()
+          };
+        }
+        return t;
+      });
+      saveStoredTickets(updated);
+      return updated;
+    });
+
+    await adminUpdateTicketRemote(ticketId, {
+      notes: cleanNote
+    });
+  };
+
   return {
     tickets,
     inventory,
@@ -1472,6 +1560,7 @@ export function useAppStore() {
     resumeService,
     manualDispatch,
     updateTicketAdmin,
+    addTicketNote,
     createTechnician,
     updateTechnician,
     deleteTechnician,

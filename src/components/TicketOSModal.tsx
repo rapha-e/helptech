@@ -1,12 +1,15 @@
+import React from 'react';
 import type { Ticket } from '../data/seedData';
 import { X, Printer, ShieldCheck, MapPin, Building2, Calendar, Phone, CheckCircle2 } from 'lucide-react';
 
 interface TicketOSModalProps {
   ticket: Ticket;
   onClose: () => void;
+  onAddNote?: (note: string) => void;
 }
 
-export const TicketOSModal: React.FC<TicketOSModalProps> = ({ ticket, onClose }) => {
+export const TicketOSModal: React.FC<TicketOSModalProps> = ({ ticket, onClose, onAddNote }) => {
+  const [newNote, setNewNote] = React.useState('');
   const handlePrint = () => {
     window.print();
   };
@@ -181,10 +184,99 @@ export const TicketOSModal: React.FC<TicketOSModalProps> = ({ ticket, onClose })
             </div>
           )}
 
+          {/* Histórico de Alterações, Notas & Linha do Tempo da OS */}
+          <div className="space-y-3 pt-2">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 border-b pb-1 flex items-center justify-between">
+              <span>4. Histórico de Alterações, Notas & Linha do Tempo</span>
+              <span className="text-[10px] text-blue-600 font-semibold lowercase">
+                {ticket.history?.length || 0} registro(s)
+              </span>
+            </h2>
+
+            {/* Inserir Nova Nota */}
+            {onAddNote && (
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2 print:hidden">
+                <label className="text-[11px] font-bold text-slate-700 block">
+                  Adicionar Nova Nota / Despacho / Parecer Administrativo:
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newNote}
+                    onChange={(e) => setNewNote(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newNote.trim()) {
+                        e.preventDefault();
+                        onAddNote(newNote.trim());
+                        setNewNote('');
+                      }
+                    }}
+                    placeholder="Digite uma nota sobre o chamado ou status..."
+                    className="flex-1 text-xs p-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newNote.trim()) {
+                        onAddNote(newNote.trim());
+                        setNewNote('');
+                      }
+                    }}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shrink-0 shadow-xs"
+                  >
+                    Gravar Nota
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Linha do Tempo */}
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {ticket.history && ticket.history.length > 0 ? (
+                ticket.history.map((h, idx) => (
+                  <div key={h.id || idx} className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                        <span>{h.author_name}</span>
+                        <span className="text-[10px] text-slate-400 font-normal">({h.author_role})</span>
+                      </div>
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        {new Date(h.created_at).toLocaleString('pt-BR')}
+                      </span>
+                    </div>
+
+                    {h.from_status && h.to_status && h.from_status !== h.to_status && (
+                      <div className="text-[11px] text-slate-600 font-semibold">
+                        Etapa alterada: <span className="text-slate-500 line-through">{h.from_status}</span> &rarr; <span className="text-blue-700">{h.to_status}</span>
+                      </div>
+                    )}
+
+                    {h.technician_name && (
+                      <div className="text-[11px] text-slate-600">
+                        Técnico atribuído: <strong>{h.technician_name}</strong>
+                      </div>
+                    )}
+
+                    {h.note && (
+                      <div className="text-[11px] text-slate-800 bg-white p-2 rounded-lg border border-slate-150 leading-relaxed font-sans">
+                        &ldquo;{h.note}&rdquo;
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-500 italic text-center">
+                  Chamado aberto em {new Date(ticket.created_at).toLocaleString('pt-BR')}. Nenhuma alteração registrada até o momento.
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Assinatura Digital do Gestor */}
           <div className="pt-4 border-t-2 border-slate-900/20">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
-              4. Homologação e Assinatura Digital do Gestor Escolar
+              5. Homologação e Assinatura Digital do Gestor Escolar
             </h2>
 
             {ticket.completion ? (

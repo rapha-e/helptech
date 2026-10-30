@@ -62,6 +62,7 @@ interface CentralAdminDashboardProps {
   onUpdateSystemUser?: (id: string, user: Partial<SystemUser> & { password?: string }) => void;
   onDeleteSystemUser?: (id: string) => void;
   onToggleSystemUserActive?: (id: string) => void;
+  onAddTicketNote?: (ticketId: string, note: string) => void;
   onAdminUpdateTicket?: (
     ticketId: string,
     params: {
@@ -138,6 +139,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   onDeleteSystemUser,
   onToggleSystemUserActive,
   onAdminUpdateTicket,
+  onAddTicketNote: _onAddTicketNote,
   onResetDatabase,
   inventory = [],
   onUpdateInventoryQuantity = () => {},
@@ -750,6 +752,12 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                           </div>
                         );
                       })()}
+
+                      {ticket.notes && (
+                        <div className="text-[10px] bg-amber-50/90 p-1.5 rounded-lg border border-amber-200 text-amber-950 line-clamp-2" title={ticket.notes}>
+                          <span className="font-bold text-amber-800">📝 Parecer:</span> {ticket.notes}
+                        </div>
+                      )}
 
                       {/* Gestão Universal de Técnico Atribuído */}
                       <div className="pt-2 border-t border-slate-100">
@@ -2381,16 +2389,45 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
               {/* Observações Administrativas */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  Justificativa / Observações da Modificação
+                  Nova Nota / Parecer / Despacho na OS
                 </label>
                 <textarea
                   rows={2}
                   value={editTicketForm.notes}
                   onChange={(e) => setEditTicketForm({ ...editTicketForm, notes: e.target.value })}
-                  placeholder="Ex: OS retornada para revisão técnica após diagnóstico de laboratório."
+                  placeholder="Ex: OS analisada e aprovada para atendimento emergencial com troca de placa."
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
               </div>
+
+              {/* Histórico Anterior da OS */}
+              {editingTicket.history && editingTicket.history.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                    Linha do Tempo / Histórico Salvo ({editingTicket.history.length}):
+                  </span>
+                  <div className="max-h-36 overflow-y-auto space-y-1 pr-1 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                    {editingTicket.history.map((h, i) => (
+                      <div key={h.id || i} className="p-1.5 bg-white rounded border border-slate-100 text-[10px] space-y-0.5">
+                        <div className="flex items-center justify-between font-bold text-slate-700">
+                          <span>{h.author_name}</span>
+                          <span className="text-slate-400 font-mono text-[9px]">
+                            {new Date(h.created_at).toLocaleString('pt-BR')}
+                          </span>
+                        </div>
+                        {h.from_status && h.to_status && h.from_status !== h.to_status && (
+                          <div className="text-slate-500">
+                            Etapa: <span className="line-through">{h.from_status}</span> &rarr; <span className="text-blue-700 font-semibold">{h.to_status}</span>
+                          </div>
+                        )}
+                        {h.note && (
+                          <div className="text-slate-800 font-medium italic">&ldquo;{h.note}&rdquo;</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button

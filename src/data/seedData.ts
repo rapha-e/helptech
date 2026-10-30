@@ -110,6 +110,19 @@ export interface TicketDispatchLog {
   created_at: string;
 }
 
+
+export interface TicketHistoryEntry {
+  id: string;
+  created_at: string;
+  action_type: 'status_change' | 'technician_reassign' | 'admin_edit' | 'note_added' | string;
+  from_status?: string;
+  to_status?: string;
+  author_name: string;
+  author_role: string;
+  note?: string;
+  technician_name?: string;
+}
+
 export interface TicketNotification {
   id: string;
   ticket_id: string;
@@ -169,6 +182,8 @@ export interface Ticket {
   attachments: TicketAttachment[];
   dispatch_logs: TicketDispatchLog[];
   notifications?: TicketNotification[];
+  notes?: string;
+  history?: TicketHistoryEntry[];
   csat_rating?: number;
   csat_comment?: string;
   csat_at?: string;

@@ -81,6 +81,7 @@ export const App: React.FC = () => {
     resumeService,
     manualDispatch,
     updateTicketAdmin,
+    addTicketNote,
     createTechnician,
     updateTechnician,
     deleteTechnician,
@@ -348,6 +349,7 @@ export const App: React.FC = () => {
                 categories={categories}
                 onManualDispatch={manualDispatch}
                 onAdminUpdateTicket={updateTicketAdmin}
+                onAddTicketNote={addTicketNote}
                 onDecideQuote={decideQuote}
                 onViewOS={(ticket) => setViewingOsTicket(ticket)}
                 onCreateTechnician={createTechnician}
@@ -397,6 +399,7 @@ export const App: React.FC = () => {
           <TicketOSModal
             ticket={tickets.find((t) => t.id === viewingOsTicket.id) || viewingOsTicket}
             onClose={() => setViewingOsTicket(null)}
+            onAddNote={(note) => addTicketNote(viewingOsTicket.id, note)}
           />
         )}
 
