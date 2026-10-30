@@ -162,6 +162,37 @@ export async function fetchRemoteSystemUsers(): Promise<RemoteServiceResult<Syst
 }
 
 /**
+ * Salva ou atualiza usuário do sistema/administrador com senha de autenticação atômica no Supabase
+ */
+export async function saveRemoteSystemUserWithAuth(
+  userData: Partial<SystemUser> & { password?: string }
+): Promise<RemoteServiceResult<SystemUser>> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: null, error: 'Supabase não configurado', fromFallback: true };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('save_system_user_with_auth', {
+      p_id: userData.id && !userData.id.startsWith('user-') ? userData.id : null,
+      p_name: userData.name,
+      p_phone: userData.phone,
+      p_email: userData.email,
+      p_role: userData.role || 'controladoria',
+      p_active: userData.active ?? true,
+      p_password: userData.password || null
+    });
+
+    if (error) {
+      return { data: null, error: error.message, fromFallback: false };
+    }
+
+    return { data: data as SystemUser, error: null, fromFallback: false };
+  } catch (err: any) {
+    return { data: null, error: err.message, fromFallback: true };
+  }
+}
+
+/**
  * Consulta categorias de chamados
  */
 export async function fetchRemoteCategories(): Promise<RemoteServiceResult<TicketCategory[]>> {

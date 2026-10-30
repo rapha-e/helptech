@@ -60,8 +60,8 @@ interface CentralAdminDashboardProps {
   onUpdateTechnician?: (id: string, tech: Partial<Technician> & { password?: string }) => void;
   onDeleteTechnician?: (id: string) => void;
   onToggleTechnicianStatus?: (id: string) => void;
-  onCreateSystemUser?: (user: Omit<SystemUser, 'id' | 'created_at'>) => void;
-  onUpdateSystemUser?: (id: string, user: Partial<SystemUser>) => void;
+  onCreateSystemUser?: (user: Omit<SystemUser, 'id' | 'created_at'> & { password?: string }) => void;
+  onUpdateSystemUser?: (id: string, user: Partial<SystemUser> & { password?: string }) => void;
   onDeleteSystemUser?: (id: string) => void;
   onToggleSystemUserActive?: (id: string) => void;
   onResetDatabase: () => void;
@@ -139,6 +139,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
     name: '',
     email: '',
     phone: '',
+    password: '',
     role: 'controladoria' as SystemUser['role'],
     active: true
   });
@@ -216,6 +217,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
         name: user.name,
         email: user.email,
         phone: user.phone,
+        password: '',
         role: user.role,
         active: user.active
       });
@@ -225,6 +227,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
         name: '',
         email: '',
         phone: '',
+        password: '',
         role: 'controladoria',
         active: true
       });
@@ -239,10 +242,21 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
       return;
     }
 
+    if (!editingUser && (!userForm.password || userForm.password.trim().length < 6)) {
+      alert('A senha de acesso do novo administrador/usuário deve ter no mínimo 6 caracteres.');
+      return;
+    }
+
     if (editingUser && onUpdateSystemUser) {
-      onUpdateSystemUser(editingUser.id, userForm);
+      onUpdateSystemUser(editingUser.id, {
+        ...userForm,
+        password: userForm.password ? userForm.password : undefined
+      });
     } else if (onCreateSystemUser) {
-      onCreateSystemUser(userForm);
+      onCreateSystemUser({
+        ...userForm,
+        password: userForm.password
+      });
     }
     setShowUserModal(false);
   };
@@ -1826,6 +1840,26 @@ $$ LANGUAGE plpgsql;`}
                 </select>
                 <p className="text-[10px] text-slate-400 mt-1">
                   Define o nível de permissão no painel de controle e na auditoria.
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  {editingUser ? 'Alterar Senha de Acesso (Opcional)' : 'Senha de Acesso ao Sistema *'}
+                </label>
+                <input
+                  type="password"
+                  required={!editingUser}
+                  minLength={6}
+                  value={userForm.password}
+                  onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                  placeholder={editingUser ? 'Deixe em branco para manter a senha atual' : 'Mínimo 6 caracteres (Ex: Admin@2026)'}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                />
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  {editingUser
+                    ? 'Digite uma nova senha para redefinir o acesso deste usuário na Central e Controladoria.'
+                    : 'Esta senha será usada pelo usuário para autenticar na Central e Controladoria.'}
                 </p>
               </div>
 

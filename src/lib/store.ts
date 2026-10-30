@@ -36,7 +36,8 @@ import {
   fetchRemoteSystemUsers,
   fetchRemoteCategories,
   fetchRemoteRegions,
-  saveRemoteTechnicianWithAuth
+  saveRemoteTechnicianWithAuth,
+  saveRemoteSystemUserWithAuth
 } from './masterDataService';
 import { validateStateTransition } from './stateMachine';
 
@@ -1247,20 +1248,43 @@ export function useAppStore() {
   /**
    * 14. CRUD de Administradores / Usuários do Sistema
    */
-  const createSystemUser = (userData: Omit<SystemUser, 'id' | 'created_at'>) => {
+  const createSystemUser = async (userData: Omit<SystemUser, 'id' | 'created_at'> & { password?: string }) => {
+    const tempId = `usr-${Date.now().toString(36)}`;
     const newUser: SystemUser = {
       ...userData,
-      id: `usr-${Date.now().toString(36)}`,
+      id: tempId,
       created_at: new Date().toISOString()
     };
     setSystemUsers((prev) => [newUser, ...prev]);
+
+    if (isSupabaseConfigured) {
+      try {
+        const res = await saveRemoteSystemUserWithAuth(userData);
+        if (res.data) {
+          setSystemUsers((prev) =>
+            prev.map((u) => (u.id === tempId ? { ...u, ...res.data } : u))
+          );
+          return res.data;
+        }
+      } catch (err) {
+        console.warn('Erro ao salvar usuário no banco:', err);
+      }
+    }
     return newUser;
   };
 
-  const updateSystemUser = (id: string, updates: Partial<SystemUser>) => {
+  const updateSystemUser = async (id: string, updates: Partial<SystemUser> & { password?: string }) => {
     setSystemUsers((prev) =>
       prev.map((usr) => (usr.id === id ? { ...usr, ...updates } : usr))
     );
+
+    if (isSupabaseConfigured) {
+      try {
+        await saveRemoteSystemUserWithAuth({ id, ...updates });
+      } catch (err) {
+        console.warn('Erro ao atualizar usuário no banco:', err);
+      }
+    }
   };
 
   const deleteSystemUser = (id: string) => {
