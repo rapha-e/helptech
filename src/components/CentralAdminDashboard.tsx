@@ -8,7 +8,6 @@ import type {
   SystemUser
 } from '../data/seedData';
 import { getBestCandidateTechnician } from '../lib/geoEngine';
-import { SUPABASE_MASTER_DDL } from '../data/supabaseDdl';
 import { InventoryManagementModal } from './InventoryManagementModal';
 import { OfficialAuditReportModal } from './OfficialAuditReportModal';
 import type { InventoryItem } from '../data/seedData';
@@ -16,15 +15,14 @@ import {
   Kanban,
   FileSpreadsheet,
   Cpu,
-  Database,
   Building2,
   Users,
   AlertTriangle,
   AlertCircle,
   CheckCircle2,
   Filter,
-  DollarSign,
   Download,
+  DollarSign,
   Plus,
   Trash2,
   Edit,
@@ -80,8 +78,29 @@ interface CentralAdminDashboardProps {
   inventory?: InventoryItem[];
   onUpdateInventoryQuantity?: (id: string, delta: number) => void;
   onAddInventoryItem?: (item: Omit<InventoryItem, 'id'>) => void;
+  onUpdateInventoryItem?: (id: string, updates: Partial<InventoryItem>) => void;
+  onDeleteInventoryItem?: (id: string) => void;
 }
 
+
+
+export const CRE_COORDINATES_MAP: Record<string, { lat: number; lng: number }> = {
+  'Brazlândia': { lat: -15.6780, lng: -48.1980 },
+  'Ceilândia': { lat: -15.8200, lng: -48.1070 },
+  'Gama': { lat: -16.0210, lng: -48.0620 },
+  'Guará': { lat: -15.8260, lng: -47.9800 },
+  'Núcleo Bandeirante': { lat: -15.8710, lng: -47.9680 },
+  'Paranoá/Itapoã': { lat: -15.7725, lng: -47.7795 },
+  'Paranoá': { lat: -15.7725, lng: -47.7795 },
+  'Planaltina': { lat: -15.6190, lng: -47.6510 },
+  'Plano Piloto': { lat: -15.7940, lng: -47.8820 },
+  'Recanto das Emas': { lat: -15.9080, lng: -48.0630 },
+  'Samambaia': { lat: -15.8760, lng: -48.0850 },
+  'Santa Maria': { lat: -16.0180, lng: -48.0120 },
+  'São Sebastião': { lat: -15.9030, lng: -47.7750 },
+  'Sobradinho': { lat: -15.6510, lng: -47.7920 },
+  'Taguatinga': { lat: -15.8340, lng: -48.0560 }
+};
 
 export const KANBAN_STAGES_FLOW: {
   status: Ticket['status'];
@@ -122,7 +141,9 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   onResetDatabase,
   inventory = [],
   onUpdateInventoryQuantity = () => {},
-  onAddInventoryItem = () => {}
+  onAddInventoryItem = () => {},
+  onUpdateInventoryItem,
+  onDeleteInventoryItem
 }) => {
   const [showInventoryModal, setShowInventoryModal] = useState<boolean>(false);
   const [showAuditReportModal, setShowAuditReportModal] = useState<boolean>(false);
@@ -132,6 +153,8 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
 
   // Estado para simulação de despacho
   const [simSchoolId, setSimSchoolId] = useState<string>(schools[0]?.id || '');
+  const [simCreFilter, setSimCreFilter] = useState<string>('todas');
+  const [simCustomGps, setSimCustomGps] = useState<{ lat: number; lng: number; label: string } | null>(null);
 
   // Estados para Edição Administrativa da OS e Transição de Etapas
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
@@ -429,28 +452,24 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
     }
   ];
 
-  // Simulação do Motor de Despacho
-  const selectedSimSchool = schools.find((s) => s.id === simSchoolId);
-  const bestCandidate = selectedSimSchool
-    ? getBestCandidateTechnician(
-        selectedSimSchool.latitude,
-        selectedSimSchool.longitude,
-        technicians,
-        tickets,
-        []
-      )
-    : null;
+  // Simulação do Motor de Despacho com suporte a filtro por CRE e GPS em Tempo Real
+  const simFilteredSchools =
+    simCreFilter === 'todas'
+      ? schools
+      : schools.filter((s) => s.cre_name.toLowerCase() === simCreFilter.toLowerCase() || s.cre_id === simCreFilter);
+  const selectedSimSchool =
+    simFilteredSchools.find((s) => s.id === simSchoolId) ||
+    schools.find((s) => s.id === simSchoolId) ||
+    simFilteredSchools[0] ||
+    schools[0];
 
-  // Baixar script SQL Master atualizado
-  const downloadSchemaSql = () => {
-    const element = document.createElement('a');
-    const file = new Blob([SUPABASE_MASTER_DDL], { type: 'text/plain' });
-    element.href = URL.createObjectURL(file);
-    element.download = 'service_desk_escolas_df_schema.sql';
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
-  };
+  const targetSimLat = simCustomGps ? simCustomGps.lat : selectedSimSchool?.latitude;
+  const targetSimLng = simCustomGps ? simCustomGps.lng : selectedSimSchool?.longitude;
+
+  const bestCandidate =
+    targetSimLat !== undefined && targetSimLng !== undefined
+      ? getBestCandidateTechnician(targetSimLat, targetSimLng, technicians, tickets, [])
+      : null;
 
   // Relatório Executivo de SLAs
   const slaReport = calculateSlaReport(tickets, regions, technicians);
@@ -608,16 +627,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
           >
             <FileSpreadsheet size={14} className="text-emerald-600" /> Relatório Oficial Auditoria Interna
           </button>
-          <button
-            onClick={() => setActiveTab('sql')}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors ${
-              activeTab === 'sql'
-                ? 'bg-slate-900 text-white shadow'
-                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-            }`}
-          >
-            <Database size={14} /> Supabase DDL
-          </button>
+
         </div>
 
         <button
@@ -1217,51 +1227,137 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
         </div>
       )}
 
-      {/* ABA 3: MOTOR DE DESPACHO INTELIGENTE (PROXIMIDADE) */}
+      {/* ABA 3: MOTOR DE DESPACHO INTELIGENTE (PROXIMIDADE & GEOLOCALIZAÇÃO) */}
       {activeTab === 'despacho' && (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
-          <div>
-            <h3 className="font-bold text-slate-900 text-base">
-              Simulador do Algoritmo de Despacho por Proximidade e Carga
-            </h3>
-            <p className="text-xs text-slate-500">
-              Testa em tempo real a função SQL <code className="font-mono bg-slate-100 px-1 py-0.5 rounded">get_best_candidate_technician()</code> selecionando qualquer escola pública do DF
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+            <div>
+              <h3 className="font-bold text-slate-900 text-base">
+                Motor de Despacho Geodésico por Proximidade & Carga
+              </h3>
+              <p className="text-xs text-slate-500">
+                Cálculo Haversine em tempo real considerando coordenadas da unidade escolar ou GPS atual, raio de cobertura e limite de chamados ativos.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!navigator.geolocation) {
+                    alert('Geolocalização não suportada neste navegador.');
+                    return;
+                  }
+                  navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                      setSimCustomGps({
+                        lat: Number(pos.coords.latitude.toFixed(6)),
+                        lng: Number(pos.coords.longitude.toFixed(6)),
+                        label: 'Minha Localização GPS Atual'
+                      });
+                    },
+                    () => {
+                      alert('Não foi possível obter o GPS atual. Verifique a permissão de localização do navegador.');
+                    },
+                    { enableHighAccuracy: true, timeout: 8000 }
+                  );
+                }}
+                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
+              >
+                <MapPin size={14} /> Usar Meu GPS Atual
+              </button>
+              {simCustomGps && (
+                <button
+                  type="button"
+                  onClick={() => setSimCustomGps(null)}
+                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
+                >
+                  Voltar para Escola
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-            {/* Seletor de Escola */}
+            {/* Seletor de Regional e Escola */}
             <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                1. Selecione a Unidade Escolar para Teste de Despacho:
-              </label>
-              <select
-                value={simSchoolId}
-                onChange={(e) => setSimSchoolId(e.target.value)}
-                className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-xl font-medium"
-              >
-                {schools.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    [{s.cre_name}] {s.name} - ({s.latitude}, {s.longitude})
-                  </option>
-                ))}
-              </select>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  1. Filtrar por Coordenação Regional (CRE):
+                </label>
+                <select
+                  value={simCreFilter}
+                  onChange={(e) => {
+                    const nextCre = e.target.value;
+                    setSimCreFilter(nextCre);
+                    setSimCustomGps(null);
+                    const nextList =
+                      nextCre === 'todas'
+                        ? schools
+                        : schools.filter(
+                            (s) =>
+                              s.cre_name.toLowerCase() === nextCre.toLowerCase() || s.cre_id === nextCre
+                          );
+                    if (nextList[0]) setSimSchoolId(nextList[0].id);
+                  }}
+                  className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-xl font-semibold text-slate-800"
+                >
+                  <option value="todas">Todas as Regionais ({schools.length} unidades)</option>
+                  {regions.map((r) => (
+                    <option key={r.id} value={r.name}>
+                      CRE {r.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-              {selectedSimSchool && (
-                <div className="p-3 bg-white rounded-lg border border-slate-200 text-xs space-y-1">
-                  <div className="font-bold text-slate-800">{selectedSimSchool.name}</div>
-                  <div className="text-slate-500">Região: CRE {selectedSimSchool.cre_name}</div>
-                  <div className="text-slate-400 font-mono text-[11px]">
-                    Coordenadas: Lat {selectedSimSchool.latitude} | Lng {selectedSimSchool.longitude}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  2. Selecione a Unidade Escolar para Cálculo Geodésico:
+                </label>
+                <select
+                  value={selectedSimSchool?.id || ''}
+                  onChange={(e) => {
+                    setSimSchoolId(e.target.value);
+                    setSimCustomGps(null);
+                  }}
+                  className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-xl font-medium text-slate-900"
+                >
+                  {simFilteredSchools.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      [{s.cre_name}] {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {simCustomGps ? (
+                <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200 text-xs space-y-1">
+                  <div className="font-bold text-emerald-900 flex items-center gap-1">
+                    <MapPin size={14} className="text-emerald-600" /> Origem: {simCustomGps.label}
+                  </div>
+                  <div className="text-emerald-700 font-mono text-[11px]">
+                    Coordenadas GPS: Lat {simCustomGps.lat} | Lng {simCustomGps.lng}
                   </div>
                 </div>
+              ) : (
+                selectedSimSchool && (
+                  <div className="p-3 bg-white rounded-lg border border-slate-200 text-xs space-y-1">
+                    <div className="font-bold text-slate-800">{selectedSimSchool.name}</div>
+                    <div className="text-slate-500">
+                      Região: CRE {selectedSimSchool.cre_name} &bull; {selectedSimSchool.address}
+                    </div>
+                    <div className="text-slate-600 font-mono text-[11px] bg-slate-50 px-2 py-1 rounded border border-slate-100">
+                      Coordenadas Geodésicas: Lat {selectedSimSchool.latitude} | Lng {selectedSimSchool.longitude}
+                    </div>
+                  </div>
+                )
               )}
             </div>
 
             {/* Resultado do Motor */}
             <div className="space-y-4 bg-blue-50/60 p-4 rounded-xl border border-blue-200 text-xs">
               <label className="block text-xs font-bold text-blue-900 uppercase tracking-wider">
-                2. Resultado da Execução do Motor de Despacho:
+                3. Técnico Selecionado pelo Motor de Proximidade:
               </label>
 
               {bestCandidate ? (
@@ -1271,13 +1367,13 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                       {bestCandidate.technician.name}
                     </span>
                     <span className="bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded-full text-[10px]">
-                      Melhor Candidato
+                      1º Elegível Mais Próximo
                     </span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
-                      <span className="text-slate-400 block">Distância Euclidiana:</span>
+                      <span className="text-slate-400 block">Distância Geodésica (Haversine):</span>
                       <strong className="text-blue-700 text-sm">
                         {bestCandidate.distanceKm} km
                       </strong>
@@ -1289,12 +1385,12 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                       </strong>
                     </div>
                     <div>
-                      <span className="text-slate-400 block">Raio Máximo:</span>
+                      <span className="text-slate-400 block">Raio Máximo Configurado:</span>
                       <span className="text-slate-700">{bestCandidate.technician.radius_km} km</span>
                     </div>
                     <div>
-                      <span className="text-slate-400 block">Base Operacional:</span>
-                      <span className="text-slate-700">
+                      <span className="text-slate-400 block">CRE Base Operacional:</span>
+                      <span className="text-slate-700 font-semibold">
                         {bestCandidate.technician.primary_cre_name}
                       </span>
                     </div>
@@ -1302,97 +1398,88 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                 </div>
               ) : (
                 <div className="p-4 bg-amber-100/60 text-amber-900 rounded-xl border border-amber-300">
-                  Nenhum técnico disponível dentro do raio limite ou com capacidade disponível.
-                  O chamado seria direcionado para a fila de triagem manual de exceção.
+                  Nenhum técnico disponível dentro do raio limite ou com capacidade livre. O chamado será encaminhado para atribuição manual na Central.
                 </div>
               )}
             </div>
           </div>
-        </div>
-      )}
 
-      {/* ABA 4: VISUALIZADOR DE DDL SUPABASE & BANCO DE DADOS */}
-      {activeTab === 'sql' && (
-        <div className="bg-slate-900 text-slate-200 rounded-2xl p-6 shadow-xl space-y-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                <h3 className="font-bold text-white text-base">
-                  Conexão Supabase Configurada
-                </h3>
+          {/* Matriz de Distância de Todos os Técnicos */}
+          {targetSimLat !== undefined && targetSimLng !== undefined && (
+            <div className="pt-2">
+              <h4 className="font-bold text-xs text-slate-700 uppercase tracking-wider mb-2">
+                Matriz Geodésica Completa dos Técnicos Cadastrados ({technicians.length})
+              </h4>
+              <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-100 text-slate-600 font-bold border-b">
+                    <tr>
+                      <th className="p-2.5">Técnico</th>
+                      <th className="p-2.5">CRE Base</th>
+                      <th className="p-2.5">Coordenadas Base</th>
+                      <th className="p-2.5 text-center">Distância Calculada</th>
+                      <th className="p-2.5 text-center">Raio Limite</th>
+                      <th className="p-2.5 text-center">Status / Elegibilidade</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {technicians
+                      .map((t) => {
+                        const R = 6371;
+                        const dLat = ((targetSimLat - t.latitude) * Math.PI) / 180;
+                        const dLon = ((targetSimLng - t.longitude) * Math.PI) / 180;
+                        const a =
+                          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                          Math.cos((t.latitude * Math.PI) / 180) *
+                            Math.cos((targetSimLat * Math.PI) / 180) *
+                            Math.sin(dLon / 2) *
+                            Math.sin(dLon / 2);
+                        const dist =
+                          Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 100) / 100;
+                        return { tech: t, dist };
+                      })
+                      .sort((a, b) => a.dist - b.dist)
+                      .map(({ tech, dist }) => {
+                        const inRadius = dist <= tech.radius_km;
+                        const isBest = bestCandidate?.technician.id === tech.id;
+                        return (
+                          <tr key={tech.id} className={isBest ? 'bg-emerald-50/70 font-semibold' : 'hover:bg-slate-50'}>
+                            <td className="p-2.5 text-slate-900">{tech.name}</td>
+                            <td className="p-2.5 text-slate-600">CRE {tech.primary_cre_name}</td>
+                            <td className="p-2.5 font-mono text-[11px] text-slate-500">
+                              {tech.latitude.toFixed(4)}, {tech.longitude.toFixed(4)}
+                            </td>
+                            <td className="p-2.5 text-center font-mono font-bold text-blue-700">
+                              {dist.toFixed(2)} km
+                            </td>
+                            <td className="p-2.5 text-center text-slate-600">{tech.radius_km} km</td>
+                            <td className="p-2.5 text-center">
+                              {isBest ? (
+                                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold">
+                                  ★ Selecionado (Mais Próximo)
+                                </span>
+                              ) : !tech.active || tech.status !== 'disponivel' ? (
+                                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full text-[10px]">
+                                  Indisponível ({tech.status})
+                                </span>
+                              ) : inRadius ? (
+                                <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-[10px] font-bold">
+                                  Elegível (Dentro do Raio)
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-[10px]">
+                                  Fora do Raio ({dist.toFixed(1)} &gt; {tech.radius_km} km)
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Projeto conectado: <code className="text-cyan-400 font-mono bg-slate-950 px-2 py-0.5 rounded">https://fmmlvsoevxhoqpjpberk.supabase.co</code>
-              </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(SUPABASE_MASTER_DDL);
-                    alert('Código DDL Completo copiado para a área de transferência! Cole no SQL Editor do Supabase.');
-                  } catch {
-                    alert('Falha ao copiar automaticamente. Use o botão Baixar schema.sql');
-                  }
-                }}
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow"
-              >
-                Copiar DDL Completo (v2.1)
-              </button>
-              <button
-                onClick={downloadSchemaSql}
-                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow"
-              >
-                <Download size={14} /> Baixar schema.sql
-              </button>
-            </div>
-          </div>
-
-          <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 text-xs space-y-2">
-            <div className="font-bold text-slate-300">Como executar no Supabase:</div>
-            <ol className="list-decimal list-inside text-slate-400 space-y-1">
-              <li>Acesse o dashboard do Supabase: <span className="text-blue-400 font-mono">https://supabase.com/dashboard/project/fmmlvsoevxhoqpjpberk</span></li>
-              <li>No menu lateral esquerdo, clique em <strong>SQL Editor</strong>.</li>
-              <li>Clique em <strong>New Query</strong>, cole o script SQL (clique no botão verde acima) e clique em <strong>Run</strong>.</li>
-              <li>Todas as tabelas, extensões e sementes das 15 CREs serão criadas no schema <code className="text-emerald-400 font-mono">public</code>.</li>
-            </ol>
-          </div>
-
-          <pre className="p-4 bg-slate-950 rounded-xl font-mono text-xs text-emerald-400 overflow-x-auto max-h-96 leading-relaxed border border-slate-800">
-{`-- Extensões para manipulação de coordenadas e distâncias euclidianas
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS cube;
-CREATE EXTENSION IF NOT EXISTS earthdistance;
-
--- TABELAS PRINCIPAIS:
--- 1. regional_coordinations (15 CREs do DF)
--- 2. schools (332 Unidades Escolares Oficiais)
--- 3. technicians (Técnicos Credenciados)
--- 4. ticket_categories (Matriz de SLA)
--- 5. tickets (Chamados e Ordens de Serviço)
--- 6. ticket_dispatch_logs (Controle de timeouts de 20 min)
--- 7. ticket_attachments (Evidências WebP comprimidas)
--- 8. ticket_quotes & ticket_quote_items (Orçamentos)
--- 9. ticket_completions (Assinatura digital do Diretor)
-
--- FUNÇÃO DO MOTOR DE DESPACHO INTELIGENTE:
-CREATE OR REPLACE FUNCTION get_best_candidate_technician(
-    p_school_lat FLOAT, 
-    p_school_lng FLOAT,
-    p_excluded_techs UUID[] DEFAULT ARRAY[]::UUID[]
-)
-RETURNS TABLE (
-    technician_id UUID,
-    name VARCHAR,
-    phone VARCHAR,
-    distance_km FLOAT,
-    active_load BIGINT
-) AS $$
-...
-$$ LANGUAGE plpgsql;`}
-          </pre>
+          )}
         </div>
       )}
 
@@ -1890,7 +1977,17 @@ $$ LANGUAGE plpgsql;`}
                   <label className="block font-bold text-slate-700 mb-1">CRE Base Principal *</label>
                   <select
                     value={techForm.primary_cre_id}
-                    onChange={(e) => setTechForm({ ...techForm, primary_cre_id: e.target.value })}
+                    onChange={(e) => {
+                    const newCreId = e.target.value;
+                    const regObj = regions.find((r) => r.id === newCreId);
+                    const coords = regObj ? CRE_COORDINATES_MAP[regObj.name] : undefined;
+                    setTechForm({
+                      ...techForm,
+                      primary_cre_id: newCreId,
+                      latitude: coords ? coords.lat : techForm.latitude,
+                      longitude: coords ? coords.lng : techForm.longitude
+                    });
+                  }}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     {regions.map((r) => (
@@ -1914,6 +2011,28 @@ $$ LANGUAGE plpgsql;`}
                 </div>
               </div>
 
+              <div className="flex items-center justify-between pt-1">
+                <span className="font-bold text-slate-700">Coordenadas GPS da Base do Técnico</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!navigator.geolocation) return;
+                    navigator.geolocation.getCurrentPosition(
+                      (pos) => {
+                        setTechForm({
+                          ...techForm,
+                          latitude: Number(pos.coords.latitude.toFixed(6)),
+                          longitude: Number(pos.coords.longitude.toFixed(6))
+                        });
+                      },
+                      () => alert('Permissão de GPS negada ou indisponível no navegador.')
+                    );
+                  }}
+                  className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded border border-blue-200"
+                >
+                  <MapPin size={11} /> Capturar GPS Atual
+                </button>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Latitude da Base</label>
@@ -2434,6 +2553,8 @@ $$ LANGUAGE plpgsql;`}
         onClose={() => setShowInventoryModal(false)}
         onUpdateQuantity={onUpdateInventoryQuantity}
         onAddItem={onAddInventoryItem}
+        onUpdateItem={onUpdateInventoryItem}
+        onDeleteItem={onDeleteInventoryItem}
       />
 
       {/* MODAL DE RELATÓRIO OFICIAL DE PRESTAÇÃO DE CONTAS Auditoria & Governança HelpTech */}

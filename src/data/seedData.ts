@@ -264,7 +264,7 @@ export const REGIONAL_COORDINATIONS: RegionalCoordination[] = [
   { id: 'cre-gama', code: 'CRE_GAMA', name: 'Gama', active: true },
   { id: 'cre-guar', code: 'CRE_GUARA', name: 'Guará', active: true },
   { id: 'cre-nban', code: 'CRE_NUCLEO_BANDEIRANTE', name: 'Núcleo Bandeirante', active: true },
-  { id: 'cre-para', code: 'CRE_PARANOA', name: 'Paranoá', active: true },
+  { id: 'cre-para', code: 'CRE_PARANOA_ITAPOA', name: 'Paranoá/Itapoã', active: true },
   { id: 'cre-plan', code: 'CRE_PLANALTINA', name: 'Planaltina', active: true },
   { id: 'cre-ppil', code: 'CRE_PLANO_PILOTO', name: 'Plano Piloto', active: true },
   { id: 'cre-rema', code: 'CRE_RECANTO_DAS_EMAS', name: 'Recanto das Emas', active: true },

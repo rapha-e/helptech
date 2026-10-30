@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Package, AlertTriangle, Plus, Search, X } from 'lucide-react';
+import { Package, AlertTriangle, Plus, Search, X, Edit, Trash2 } from 'lucide-react';
 import type { InventoryItem } from '../data/seedData';
 
 interface InventoryManagementModalProps {
@@ -8,6 +8,8 @@ interface InventoryManagementModalProps {
   onClose: () => void;
   onUpdateQuantity: (id: string, delta: number) => void;
   onAddItem: (item: Omit<InventoryItem, 'id'>) => void;
+  onUpdateItem?: (id: string, updates: Partial<InventoryItem>) => void;
+  onDeleteItem?: (id: string) => void;
 }
 
 export const InventoryManagementModal: React.FC<InventoryManagementModalProps> = ({
@@ -15,11 +17,14 @@ export const InventoryManagementModal: React.FC<InventoryManagementModalProps> =
   inventory,
   onClose,
   onUpdateQuantity,
-  onAddItem
+  onAddItem,
+  onUpdateItem,
+  onDeleteItem
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newItem, setNewItem] = useState({
+  const [showForm, setShowForm] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
     sku: '',
     name: '',
     category: 'hardware' as InventoryItem['category'],
@@ -34,7 +39,8 @@ export const InventoryManagementModal: React.FC<InventoryManagementModalProps> =
   const filtered = inventory.filter(
     (item) =>
       item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.sku.toLowerCase().includes(searchTerm.toLowerCase())
+      item.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const lowStockItems = inventory.filter((item) => item.quantity_in_stock <= item.min_stock_alert);
@@ -43,12 +49,9 @@ export const InventoryManagementModal: React.FC<InventoryManagementModalProps> =
     0
   );
 
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newItem.name.trim() || !newItem.sku.trim()) return;
-    onAddItem(newItem);
-    setShowAddForm(false);
-    setNewItem({
+  const handleOpenCreate = () => {
+    setEditingItemId(null);
+    setFormData({
       sku: '',
       name: '',
       category: 'hardware',
@@ -57,11 +60,73 @@ export const InventoryManagementModal: React.FC<InventoryManagementModalProps> =
       unit_price: 100,
       unit: 'un'
     });
+    setShowForm(true);
+  };
+
+  const handleOpenEdit = (item: InventoryItem) => {
+    setEditingItemId(item.id);
+    setFormData({
+      sku: item.sku,
+      name: item.name,
+      category: item.category,
+      quantity_in_stock: item.quantity_in_stock,
+      min_stock_alert: item.min_stock_alert,
+      unit_price: item.unit_price,
+      unit: item.unit
+    });
+    setShowForm(true);
+  };
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name.trim() || !formData.sku.trim()) return;
+
+    if (editingItemId) {
+      if (onUpdateItem) {
+        onUpdateItem(editingItemId, {
+          sku: formData.sku.trim().toUpperCase(),
+          name: formData.name.trim(),
+          category: formData.category,
+          quantity_in_stock: Math.max(0, Number(formData.quantity_in_stock) || 0),
+          min_stock_alert: Math.max(0, Number(formData.min_stock_alert) || 0),
+          unit_price: Math.max(0, Number(formData.unit_price) || 0),
+          unit: formData.unit
+        });
+      } else {
+        const current = inventory.find((i) => i.id === editingItemId);
+        if (current) {
+          onUpdateQuantity(editingItemId, formData.quantity_in_stock - current.quantity_in_stock);
+        }
+      }
+    } else {
+      onAddItem({
+        sku: formData.sku.trim().toUpperCase(),
+        name: formData.name.trim(),
+        category: formData.category,
+        quantity_in_stock: Math.max(0, Number(formData.quantity_in_stock) || 0),
+        min_stock_alert: Math.max(0, Number(formData.min_stock_alert) || 0),
+        unit_price: Math.max(0, Number(formData.unit_price) || 0),
+        unit: formData.unit
+      });
+    }
+
+    setShowForm(false);
+    setEditingItemId(null);
+  };
+
+  const handleDirectQuantityChange = (item: InventoryItem, rawValue: string) => {
+    const parsed = parseInt(rawValue, 10);
+    const nextQty = Number.isNaN(parsed) ? 0 : Math.max(0, parsed);
+    if (onUpdateItem) {
+      onUpdateItem(item.id, { quantity_in_stock: nextQty });
+    } else {
+      onUpdateQuantity(item.id, nextQty - item.quantity_in_stock);
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-fadeIn">
-      <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
         {/* Header */}
         <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
@@ -70,7 +135,9 @@ export const InventoryManagementModal: React.FC<InventoryManagementModalProps> =
             </div>
             <div>
               <h3 className="font-bold text-sm">Almoxarifado Central & Gestão de Peças (WMS)</h3>
-              <p className="text-[11px] text-slate-400">Controle de saldo, ponto de pedido e baixa por OS</p>
+              <p className="text-[11px] text-slate-400">
+                Controle completo de estoque (CRUD), ponto de pedido e ajuste rápido digitável
+              </p>
             </div>
           </div>
           <button
@@ -114,53 +181,68 @@ export const InventoryManagementModal: React.FC<InventoryManagementModalProps> =
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por descrição da peça ou código SKU..."
+              placeholder="Buscar por descrição da peça, categoria ou código SKU..."
               className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
 
           <button
             type="button"
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shrink-0 shadow-xs"
+            onClick={handleOpenCreate}
+            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shrink-0 shadow-xs"
           >
             <Plus size={14} /> Novo Item de Peça
           </button>
         </div>
 
-        {/* Formulário Novo Item */}
-        {showAddForm && (
-          <form onSubmit={handleCreate} className="p-4 bg-blue-50/60 border-b space-y-3 animate-fadeIn">
-            <div className="font-bold text-xs text-blue-900">Cadastrar Novo Item no Almoxarifado</div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+        {/* Formulário Criar / Editar Item */}
+        {showForm && (
+          <form onSubmit={handleSave} className="p-4 bg-blue-50/70 border-b space-y-3 animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <div className="font-bold text-xs text-blue-950">
+                {editingItemId ? '✏️ Editar Item do Almoxarifado' : '➕ Cadastrar Novo Item no Almoxarifado'}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForm(false);
+                  setEditingItemId(null);
+                }}
+                className="text-slate-400 hover:text-slate-700 text-xs font-bold"
+              >
+                ✕ Fechar
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
               <div>
-                <label className="text-[10px] font-bold text-slate-600 block">SKU *</label>
+                <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Código SKU *</label>
                 <input
                   type="text"
                   required
-                  value={newItem.sku}
-                  onChange={(e) => setNewItem({ ...newItem, sku: e.target.value })}
+                  value={formData.sku}
+                  onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
                   placeholder="Ex: RED-CAT6-EXT"
-                  className="w-full text-xs p-1.5 border rounded-lg bg-white"
+                  className="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white font-mono"
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="text-[10px] font-bold text-slate-600 block">Descrição da Peça *</label>
+                <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Descrição da Peça / Material *</label>
                 <input
                   type="text"
                   required
-                  value={newItem.name}
-                  onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="Ex: Patch Cord CAT6 2.5m Azul"
-                  className="w-full text-xs p-1.5 border rounded-lg bg-white"
+                  className="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white"
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-slate-600 block">Categoria</label>
+                <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Categoria</label>
                 <select
-                  value={newItem.category}
-                  onChange={(e) => setNewItem({ ...newItem, category: e.target.value as any })}
-                  className="w-full text-xs p-1.5 border rounded-lg bg-white"
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value as InventoryItem['category'] })}
+                  className="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white"
                 >
                   <option value="hardware">Hardware</option>
                   <option value="rede">Rede</option>
@@ -171,36 +253,48 @@ export const InventoryManagementModal: React.FC<InventoryManagementModalProps> =
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               <div>
-                <label className="text-[10px] font-bold text-slate-600 block">Qtd Inicial</label>
+                <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Saldo em Estoque</label>
                 <input
                   type="number"
                   min={0}
-                  value={newItem.quantity_in_stock}
-                  onChange={(e) => setNewItem({ ...newItem, quantity_in_stock: parseInt(e.target.value) || 0 })}
-                  className="w-full text-xs p-1.5 border rounded-lg bg-white"
+                  value={formData.quantity_in_stock}
+                  onChange={(e) => setFormData({ ...formData, quantity_in_stock: parseInt(e.target.value, 10) || 0 })}
+                  className="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white"
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-slate-600 block">Estoque Mínimo</label>
+                <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Estoque Mínimo (Alerta)</label>
                 <input
                   type="number"
-                  min={1}
-                  value={newItem.min_stock_alert}
-                  onChange={(e) => setNewItem({ ...newItem, min_stock_alert: parseInt(e.target.value) || 1 })}
-                  className="w-full text-xs p-1.5 border rounded-lg bg-white"
+                  min={0}
+                  value={formData.min_stock_alert}
+                  onChange={(e) => setFormData({ ...formData, min_stock_alert: parseInt(e.target.value, 10) || 0 })}
+                  className="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white"
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-slate-600 block">Preço Unitário (R$)</label>
+                <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Unidade de Medida</label>
+                <select
+                  value={formData.unit}
+                  onChange={(e) => setFormData({ ...formData, unit: e.target.value as InventoryItem['unit'] })}
+                  className="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white"
+                >
+                  <option value="un">Unidade (un)</option>
+                  <option value="m">Metros (m)</option>
+                  <option value="kit">Kit (kit)</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Preço Unitário (R$)</label>
                 <input
                   type="number"
                   step="0.01"
                   min={0}
-                  value={newItem.unit_price}
-                  onChange={(e) => setNewItem({ ...newItem, unit_price: parseFloat(e.target.value) || 0 })}
-                  className="w-full text-xs p-1.5 border rounded-lg bg-white"
+                  value={formData.unit_price}
+                  onChange={(e) => setFormData({ ...formData, unit_price: parseFloat(e.target.value) || 0 })}
+                  className="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white"
                 />
               </div>
             </div>
@@ -208,16 +302,19 @@ export const InventoryManagementModal: React.FC<InventoryManagementModalProps> =
             <div className="flex justify-end gap-2 pt-1">
               <button
                 type="button"
-                onClick={() => setShowAddForm(false)}
-                className="px-3 py-1.5 bg-slate-200 text-slate-700 text-xs rounded-lg"
+                onClick={() => {
+                  setShowForm(false);
+                  setEditingItemId(null);
+                }}
+                className="px-3.5 py-1.5 bg-white border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-100"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg"
+                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs"
               >
-                Salvar Item
+                {editingItemId ? 'Salvar Alterações' : 'Cadastrar Item'}
               </button>
             </div>
           </form>
@@ -226,14 +323,15 @@ export const InventoryManagementModal: React.FC<InventoryManagementModalProps> =
         {/* Tabela de Itens */}
         <div className="flex-1 overflow-y-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-100 text-slate-600 font-bold border-b sticky top-0">
+            <thead className="bg-slate-100 text-slate-600 font-bold border-b sticky top-0 z-10">
               <tr>
                 <th className="p-3">SKU</th>
                 <th className="p-3">Peça / Componente</th>
                 <th className="p-3">Categoria</th>
                 <th className="p-3 text-center">Saldo</th>
                 <th className="p-3 text-right">Preço Unit.</th>
-                <th className="p-3 text-center">Ajuste Rápido</th>
+                <th className="p-3 text-center">Ajuste Rápido (Digitável)</th>
+                <th className="p-3 text-center">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -243,10 +341,10 @@ export const InventoryManagementModal: React.FC<InventoryManagementModalProps> =
                   <tr key={item.id} className={isLow ? 'bg-amber-50/50' : 'hover:bg-slate-50'}>
                     <td className="p-3 font-mono text-[11px] font-bold text-slate-700">{item.sku}</td>
                     <td className="p-3 font-medium text-slate-900">
-                      {item.name}
+                      <div>{item.name}</div>
                       {isLow && (
-                        <span className="ml-2 text-[10px] font-bold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full inline-flex items-center gap-0.5">
-                          <AlertTriangle size={10} /> Abaixo do mínimo ({item.min_stock_alert})
+                        <span className="mt-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full inline-flex items-center gap-0.5">
+                          <AlertTriangle size={10} /> Abaixo do mínimo ({item.min_stock_alert} {item.unit})
                         </span>
                       )}
                     </td>
@@ -264,30 +362,70 @@ export const InventoryManagementModal: React.FC<InventoryManagementModalProps> =
                       R$ {item.unit_price.toFixed(2)}
                     </td>
                     <td className="p-3 text-center">
-                      <div className="inline-flex items-center gap-1 border border-slate-200 rounded-lg p-0.5 bg-white">
+                      <div className="inline-flex items-center gap-1 border border-slate-300 rounded-lg p-0.5 bg-white shadow-2xs">
                         <button
                           type="button"
                           onClick={() => onUpdateQuantity(item.id, -1)}
                           disabled={item.quantity_in_stock <= 0}
-                          className="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-100 disabled:opacity-40 text-rose-600 font-bold"
+                          className="w-6 h-6 flex items-center justify-center rounded hover:bg-rose-50 disabled:opacity-40 text-rose-600 font-bold transition-colors"
                           title="Dar baixa em 1 unidade"
                         >
                           -
                         </button>
-                        <span className="px-1 text-[11px] font-mono">{item.quantity_in_stock}</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={item.quantity_in_stock}
+                          onChange={(e) => handleDirectQuantityChange(item, e.target.value)}
+                          className="w-16 text-center text-xs font-mono font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          title="Digite a quantidade diretamente para ajuste rápido"
+                        />
                         <button
                           type="button"
                           onClick={() => onUpdateQuantity(item.id, 1)}
-                          className="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-100 text-emerald-600 font-bold"
+                          className="w-6 h-6 flex items-center justify-center rounded hover:bg-emerald-50 text-emerald-600 font-bold transition-colors"
                           title="Dar entrada em 1 unidade"
                         >
                           +
                         </button>
                       </div>
                     </td>
+                    <td className="p-3 text-center">
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEdit(item)}
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Editar peça"
+                        >
+                          <Edit size={14} />
+                        </button>
+                        {onDeleteItem && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`Deseja excluir o item "${item.name}" (${item.sku}) do almoxarifado?`)) {
+                                onDeleteItem(item.id);
+                              }
+                            }}
+                            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                            title="Excluir peça do almoxarifado"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="p-6 text-center text-slate-400 italic">
+                    Nenhuma peça encontrada com os critérios informados.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

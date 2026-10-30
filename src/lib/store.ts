@@ -1417,6 +1417,16 @@ export function useAppStore() {
     setInventory((prev) => [...prev, newEntry]);
   };
 
+  const updateInventoryItem = (id: string, updates: Partial<InventoryItem>) => {
+    setInventory((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
+    );
+  };
+
+  const deleteInventoryItem = (id: string) => {
+    setInventory((prev) => prev.filter((item) => item.id !== id));
+  };
+
   const submitTicketCsat = (ticketId: string, rating: number, comment?: string) => {
     setTickets((prev) =>
       prev.map((t) => {
@@ -1438,6 +1448,8 @@ export function useAppStore() {
     inventory,
     updateInventoryQuantity,
     addInventoryItem,
+    updateInventoryItem,
+    deleteInventoryItem,
     submitTicketCsat,
     technicians,
     systemUsers,

@@ -78,8 +78,15 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
   // Seleção de CRE (Coordenação Regional de Ensino) - inicia vazia para obrigar seleção
   const [selectedCreId, setSelectedCreId] = useState<string>('');
 
-  // Escolas filtradas exclusivamente pela CRE selecionada
-  const creSchools = selectedCreId ? schools.filter((s) => s.cre_id === selectedCreId) : [];
+  // Escolas filtradas pela CRE selecionada (compatível com UUID do Supabase e ID local)
+  const selectedCreObj = regions.find((r) => r.id === selectedCreId);
+  const creSchools = selectedCreId
+    ? schools.filter(
+        (s) =>
+          s.cre_id === selectedCreId ||
+          (selectedCreObj && s.cre_name.toLowerCase() === selectedCreObj.name.toLowerCase())
+      )
+    : [];
 
   // Formulário
   const [formData, setFormData] = useState<TicketSubmissionData>({
@@ -555,7 +562,7 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                       <div>
                         <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5 flex items-center justify-between">
                           <span>1. Coordenação Regional de Ensino (CRE) *</span>
-                          <span className="text-[10px] text-blue-600 lowercase font-medium">15 Regionais DF</span>
+                          <span className="text-[10px] text-blue-600 lowercase font-medium">{regions.length} Regionais</span>
                         </label>
                         <select
                           value={selectedCreId}

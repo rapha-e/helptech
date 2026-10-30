@@ -93,6 +93,8 @@ export const App: React.FC = () => {
     inventory,
     updateInventoryQuantity,
     addInventoryItem,
+    updateInventoryItem,
+    deleteInventoryItem,
     submitTicketCsat
   } = useAppStore();
 
@@ -360,6 +362,8 @@ export const App: React.FC = () => {
                 inventory={inventory}
                 onUpdateInventoryQuantity={updateInventoryQuantity}
                 onAddInventoryItem={addInventoryItem}
+                onUpdateInventoryItem={updateInventoryItem}
+                onDeleteInventoryItem={deleteInventoryItem}
               />
             ) : (
               <div className="max-w-md mx-auto my-14 bg-white p-8 rounded-3xl border border-slate-200 shadow-xl text-center space-y-4 animate-fadeIn">
