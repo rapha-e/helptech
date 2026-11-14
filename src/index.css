@@ -32,29 +32,83 @@
   background: #94a3b8;
 }
 
-/* Regras de impressão para geração de PDF limpo da Ordem de Serviço */
+/* Regras de impressão para geração de PDF limpo e multipágina da Ordem de Serviço e Relatórios */
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+
+  html,
   body {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
     background: #ffffff !important;
     color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block !important;
+  }
+
+  /* Oculta a aplicação de fundo (#root) quando um modal imprimível está aberto */
+  body.printing-modal-open > #root,
+  body:has(.printable-modal-root) > #root {
+    display: none !important;
   }
 
   [class*="print:hidden"],
   header,
   nav,
+  footer,
   .top-banner,
   button {
     display: none !important;
   }
 
-  #printable-os {
-    position: absolute;
-    left: 0;
-    top: 0;
+  /* Remove travas de fixed, flex, max-height e scroll para paginação completa */
+  .printable-modal-root,
+  .printable-modal-card,
+  .printable-document,
+  #printable-os,
+  #printable-audit-report {
+    position: static !important;
+    display: block !important;
     width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
     margin: 0 !important;
-    padding: 20px !important;
+    padding: 0 !important;
     box-shadow: none !important;
     border: none !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+    backdrop-filter: none !important;
+    transform: none !important;
+    animation: none !important;
+  }
+
+  .print-expand-scroll {
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .print-avoid-break,
+  tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
   }
 }

@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { Ticket } from '../data/seedData';
 import { X, Printer, ShieldCheck, MapPin, Building2, Calendar, Phone, CheckCircle2 } from 'lucide-react';
 
@@ -10,13 +11,21 @@ interface TicketOSModalProps {
 
 export const TicketOSModal: React.FC<TicketOSModalProps> = ({ ticket, onClose, onAddNote }) => {
   const [newNote, setNewNote] = React.useState('');
+
+  useEffect(() => {
+    document.body.classList.add('printing-modal-open');
+    return () => {
+      document.body.classList.remove('printing-modal-open');
+    };
+  }, []);
+
   const handlePrint = () => {
     window.print();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto animate-fadeIn">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200">
+  const modalContent = (
+    <div className="printable-modal-root fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto animate-fadeIn">
+      <div className="printable-modal-card bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200">
         {/* Barra superior de ações */}
         <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white border-b border-slate-800 print:hidden">
           <div className="flex items-center gap-2">
@@ -40,7 +49,7 @@ export const TicketOSModal: React.FC<TicketOSModalProps> = ({ ticket, onClose, o
         </div>
 
         {/* Conteúdo imprimível da OS */}
-        <div id="printable-os" className="p-8 overflow-y-auto space-y-6 text-slate-800 bg-white">
+        <div id="printable-os" className="printable-document p-8 overflow-y-auto space-y-6 text-slate-800 bg-white">
           {/* Cabeçalho Oficial HelpTech */}
           <div className="pb-6 border-b-2 border-slate-900/20">
             <div className="flex flex-col sm:flex-row items-center justify-center gap-5 mb-4">
@@ -253,10 +262,10 @@ export const TicketOSModal: React.FC<TicketOSModalProps> = ({ ticket, onClose, o
             )}
 
             {/* Linha do Tempo */}
-            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1 print-expand-scroll">
               {ticket.history && ticket.history.length > 0 ? (
                 ticket.history.map((h, idx) => (
-                  <div key={h.id || idx} className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
+                  <div key={h.id || idx} className="print-avoid-break p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
                     <div className="flex items-center justify-between text-[11px]">
                       <div className="flex items-center gap-1.5 font-bold text-slate-800">
                         <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
@@ -296,7 +305,7 @@ export const TicketOSModal: React.FC<TicketOSModalProps> = ({ ticket, onClose, o
           </div>
 
           {/* Assinatura Digital do Gestor */}
-          <div className="pt-4 border-t-2 border-slate-900/20">
+          <div className="print-avoid-break pt-4 border-t-2 border-slate-900/20">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
               5. Homologação e Assinatura Digital do Gestor Escolar
             </h2>
@@ -353,7 +362,7 @@ export const TicketOSModal: React.FC<TicketOSModalProps> = ({ ticket, onClose, o
           </div>
 
           {/* Rodapé de autenticidade */}
-          <div className="pt-4 text-center text-[10px] text-slate-500 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-2">
+          <div className="print-avoid-break pt-4 text-center text-[10px] text-slate-500 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-2">
             <span>Token de Autenticidade: <strong className="font-mono text-slate-700">{ticket.tracking_token}</strong></span>
             <span>HELP TECH INFO &bull; CNPJ: 44.761.507/0001-33 &bull; Fone: (61) 99214-4732 / 99229-5814</span>
           </div>
@@ -361,4 +370,6 @@ export const TicketOSModal: React.FC<TicketOSModalProps> = ({ ticket, onClose, o
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { FileText, Printer, X, ShieldCheck } from 'lucide-react';
 import type { Ticket, RegionalCoordination } from '../data/seedData';
 
@@ -15,6 +16,17 @@ export const OfficialAuditReportModal: React.FC<OfficialAuditReportModalProps> =
   regions,
   onClose
 }) => {
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('printing-modal-open');
+    } else {
+      document.body.classList.remove('printing-modal-open');
+    }
+    return () => {
+      document.body.classList.remove('printing-modal-open');
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const totalTickets = tickets.length;
@@ -32,9 +44,9 @@ export const OfficialAuditReportModal: React.FC<OfficialAuditReportModalProps> =
     window.print();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/80 backdrop-blur-xs overflow-y-auto animate-fadeIn">
-      <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-300 overflow-hidden">
+  const modalContent = (
+    <div className="printable-modal-root fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/80 backdrop-blur-xs overflow-y-auto animate-fadeIn">
+      <div className="printable-modal-card bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-300 overflow-hidden">
         {/* Barra superior de ações */}
         <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between shrink-0 print:hidden">
           <div className="flex items-center gap-2">
@@ -61,7 +73,7 @@ export const OfficialAuditReportModal: React.FC<OfficialAuditReportModalProps> =
         </div>
 
         {/* Corpo do Documento Timbrado Oficial */}
-        <div className="p-8 overflow-y-auto space-y-6 text-slate-800 font-sans print:p-0 print:m-0">
+        <div id="printable-audit-report" className="printable-document p-8 overflow-y-auto space-y-6 text-slate-800 font-sans print:p-0 print:m-0">
           {/* Cabeçalho Institucional */}
           <div className="border-b-2 border-slate-900 pb-4 space-y-3">
             <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
@@ -165,7 +177,7 @@ export const OfficialAuditReportModal: React.FC<OfficialAuditReportModalProps> =
           </div>
 
           {/* Termo de Ateste / Assinatura do Relatório */}
-          <div className="pt-8 border-t border-slate-200 grid grid-cols-2 gap-8 text-center text-xs text-slate-600">
+          <div className="print-avoid-break pt-8 border-t border-slate-200 grid grid-cols-2 gap-8 text-center text-xs text-slate-600">
             <div className="space-y-8">
               <div className="h-0.5 bg-slate-300 w-48 mx-auto" />
               <div>
@@ -184,11 +196,13 @@ export const OfficialAuditReportModal: React.FC<OfficialAuditReportModalProps> =
             </div>
           </div>
 
-          <div className="pt-3 border-t border-slate-200 text-center text-[10px] text-slate-500">
+          <div className="print-avoid-break pt-3 border-t border-slate-200 text-center text-[10px] text-slate-500">
             HELP TECH INFO &bull; CNPJ: 44.761.507/0001-33 &bull; IE: 08.106.375/001-11 &bull; Fone: (61) 99214-4732 / 99229-5814 &bull; Quadra 317 casa 28 Del Lago II, Itapoã, Brasília-DF
           </div>
         </div>
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

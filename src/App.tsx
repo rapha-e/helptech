@@ -7,10 +7,8 @@ import {
   Building2,
   Smartphone,
   ShieldCheck,
-  Headphones,
   Lock,
   User,
-  Database,
   RefreshCw,
   LogIn,
   LogOut
@@ -145,9 +143,11 @@ export const App: React.FC = () => {
         <div className="max-w-[1440px] mx-auto px-3 sm:px-6 py-2.5 flex flex-col md:flex-row items-center justify-between gap-3">
           {/* Marca / Identidade */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-500 flex items-center justify-center text-white shadow-md">
-              <Headphones size={22} />
-            </div>
+            <img
+              src="/helptech-logo.png"
+              alt="HelpTech Informática"
+              className="w-11 h-11 rounded-xl object-contain bg-slate-800 border border-slate-700 shadow-md shrink-0"
+            />
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="font-extrabold text-base tracking-tight text-white">
@@ -158,20 +158,15 @@ export const App: React.FC = () => {
                 </span>
                 <button
                   onClick={() => refreshData()}
-                  title={
-                    remoteStatus === 'conectado'
-                      ? 'Supabase PostgreSQL Conectado. Clique para sincronizar.'
-                      : 'Modo Offline / Fallback Local. Clique para tentar reconectar.'
-                  }
+                  title="Clique para sincronizar os dados do sistema"
                   className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-all ${
                     remoteStatus === 'conectado'
                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30 hover:bg-emerald-500/30'
                       : 'bg-amber-500/20 text-amber-300 border-amber-400/30 hover:bg-amber-500/30'
                   }`}
                 >
-                  <Database size={10} />
-                  <span>{remoteStatus === 'conectado' ? 'Supabase DB' : 'Cache Local'}</span>
-                  <RefreshCw size={9} className={isSyncing ? 'animate-spin' : ''} />
+                  <RefreshCw size={10} className={isSyncing ? 'animate-spin' : ''} />
+                  <span>{remoteStatus === 'conectado' ? 'Online' : 'Local'}</span>
                 </button>
               </div>
               <p className="text-[11px] text-slate-400">
