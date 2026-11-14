@@ -1312,9 +1312,11 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                             <td className="p-2 font-medium capitalize">{it.item_type}</td>
                             <td className="p-2">{it.item_name}</td>
                             <td className="p-2 text-center">{it.quantity}</td>
-                            <td className="p-2 text-right">R$ {it.unit_price.toFixed(2)}</td>
+                            <td className="p-2 text-right">
+                              R$ {it.unit_price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
                             <td className="p-2 text-right font-semibold">
-                              R$ {it.subtotal.toFixed(2)}
+                              R$ {it.subtotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                           </tr>
                         ))}
@@ -1325,7 +1327,7 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                             Total Geral da Proposta:
                           </td>
                           <td className="p-2 text-right text-sm text-blue-900">
-                            R$ {selectedTrackedTicket.quote.total_amount.toFixed(2)}
+                            R$ {selectedTrackedTicket.quote.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                         </tr>
                       </tfoot>

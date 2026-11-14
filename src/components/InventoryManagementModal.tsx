@@ -359,7 +359,7 @@ export const InventoryManagementModal: React.FC<InventoryManagementModalProps> =
                       </span>
                     </td>
                     <td className="p-3 text-right text-slate-700 font-mono">
-                      R$ {item.unit_price.toFixed(2)}
+                      R$ {item.unit_price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="p-3 text-center">
                       <div className="inline-flex items-center gap-1 border border-slate-300 rounded-lg p-0.5 bg-white shadow-2xs">

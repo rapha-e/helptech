@@ -917,7 +917,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                       {ticket.status === 'aguardando_orcamento' && ticket.quote && ticket.quote.status === 'pendente' && (
                         <div className="pt-2 border-t border-amber-200 bg-amber-50/70 p-2 rounded-lg space-y-1.5">
                           <div className="flex items-center justify-between text-[10px] font-bold text-amber-900">
-                            <span>Orçamento: R$ {ticket.quote.total_amount.toFixed(2)}</span>
+                            <span>Orçamento: R$ {ticket.quote.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             <span className="text-amber-700 font-semibold">{ticket.quote.items.length} item(ns)</span>
                           </div>
                           <div className="flex gap-1">
@@ -1175,7 +1175,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                         </span>
                       </td>
                       <td className="p-3 text-right font-bold text-slate-900">
-                        R$ {t.quote?.total_amount.toFixed(2)}
+                        R$ {t.quote?.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td className="p-3 text-center">
                         {t.quote?.status === 'pendente' ? (
@@ -2475,7 +2475,9 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
 
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
               <span className="text-slate-500 block text-[10px] uppercase font-bold">Valor Orçado:</span>
-              <strong className="text-slate-800 text-sm">R$ {rejectingQuoteTicket.quote?.total_amount.toFixed(2)}</strong>
+              <strong className="text-slate-800 text-sm">
+                R$ {rejectingQuoteTicket.quote?.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </strong>
               <p className="text-[11px] text-slate-600 mt-1">
                 Laudo Técnico: "{rejectingQuoteTicket.quote?.technical_diagnosis}"
               </p>

@@ -165,8 +165,12 @@ export const TicketOSModal: React.FC<TicketOSModalProps> = ({ ticket, onClose, o
                       <td className="p-2 capitalize font-medium">{item.item_type}</td>
                       <td className="p-2">{item.item_name}</td>
                       <td className="p-2 text-center">{item.quantity}</td>
-                      <td className="p-2 text-right">R$ {item.unit_price.toFixed(2)}</td>
-                      <td className="p-2 text-right font-semibold">R$ {item.subtotal.toFixed(2)}</td>
+                      <td className="p-2 text-right">
+                        R$ {item.unit_price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-2 text-right font-semibold">
+                        R$ {item.subtotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -176,7 +180,7 @@ export const TicketOSModal: React.FC<TicketOSModalProps> = ({ ticket, onClose, o
                       Valor Total Homologado:
                     </td>
                     <td className="p-2 text-right text-blue-700">
-                      R$ {ticket.quote.total_amount.toFixed(2)}
+                      R$ {ticket.quote.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                   </tr>
                 </tfoot>

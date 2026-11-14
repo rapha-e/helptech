@@ -68,6 +68,34 @@ interface TechFieldPWAProps {
   onViewOS: (ticket: Ticket) => void;
 }
 
+const parseCurrencyInput = (val: string): number => {
+  if (!val) return 0;
+  const clean = val.replace(/[^\d.,]/g, '');
+  if (!clean) return 0;
+  if (clean.includes(',') && clean.includes('.')) {
+    return parseFloat(clean.replace(/\./g, '').replace(',', '.')) || 0;
+  }
+  if (clean.includes(',')) {
+    return parseFloat(clean.replace(',', '.')) || 0;
+  }
+  return parseFloat(clean) || 0;
+};
+
+const formatCurrencyBRL = (val: number): string => {
+  return (val || 0).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  });
+};
+
+const formatBRLAmount = (val: number): string => {
+  if (!val || val <= 0) return '';
+  return val.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+};
+
 export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
   technicians,
   tickets,
@@ -104,8 +132,14 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
   const [quoteTicketId, setQuoteTicketId] = useState<string | null>(null);
   const [quoteDiagnosis, setQuoteDiagnosis] = useState('');
   const [quoteItems, setQuoteItems] = useState<
-    { item_type: 'peca' | 'servico'; item_name: string; quantity: number; unit_price: number }[]
-  >([{ item_type: 'peca', item_name: '', quantity: 1, unit_price: 0 }]);
+    {
+      item_type: 'peca' | 'servico';
+      item_name: string;
+      quantity: number;
+      unit_price: number;
+      raw_price_str?: string;
+    }[]
+  >([{ item_type: 'peca', item_name: '', quantity: 1, unit_price: 0, raw_price_str: '' }]);
   const [showScanner, setShowScanner] = useState(false);
   const [scanTargetQuoteIndex, setScanTargetQuoteIndex] = useState<number | null>(null);
 
@@ -217,7 +251,7 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
   const handleAddQuoteItem = () => {
     setQuoteItems([
       ...quoteItems,
-      { item_type: 'peca', item_name: '', quantity: 1, unit_price: 0 }
+      { item_type: 'peca', item_name: '', quantity: 1, unit_price: 0, raw_price_str: '' }
     ]);
   };
 
@@ -234,12 +268,17 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
 
     onSubmitQuote(ticketId, currentTech.id, {
       technical_diagnosis: quoteDiagnosis,
-      items: validItems
+      items: validItems.map((it) => ({
+        item_type: it.item_type,
+        item_name: it.item_name,
+        quantity: it.quantity,
+        unit_price: it.unit_price
+      }))
     });
 
     setQuoteTicketId(null);
     setQuoteDiagnosis('');
-    setQuoteItems([{ item_type: 'peca', item_name: '', quantity: 1, unit_price: 0 }]);
+    setQuoteItems([{ item_type: 'peca', item_name: '', quantity: 1, unit_price: 0, raw_price_str: '' }]);
   };
 
   const handleFinalizeService = (ticketId: string) => {
@@ -778,7 +817,7 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
                     <Clock size={13} /> Orçamento em Análise pelo Gestor
                   </div>
                   <p className="text-[11px]">
-                    Total orçado: R$ {ticket.quote?.total_amount.toFixed(2)}. Aguardando aprovação digital da escola.
+                    Total orçado: {formatCurrencyBRL(ticket.quote?.total_amount || 0)}. Aguardando aprovação digital da escola.
                   </p>
                 </div>
               )}
@@ -925,9 +964,9 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
                           </button>
                         )}
                       </div>
-                      <div className="flex gap-2 text-[11px]">
-                        <div className="flex-1">
-                          <label className="text-[10px] text-slate-400 block">Qtd</label>
+                      <div className="flex gap-2 text-[11px] items-center">
+                        <div className="w-16">
+                          <label className="text-[10px] text-slate-500 font-bold block mb-0.5">Qtd</label>
                           <input
                             type="number"
                             min={1}
@@ -937,28 +976,51 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
                               updated[idx].quantity = parseInt(e.target.value) || 1;
                               setQuoteItems(updated);
                             }}
-                            className="w-full p-1 border rounded-lg text-center"
+                            className="w-full p-1 border border-slate-300 rounded-lg text-center font-bold text-slate-800"
                           />
                         </div>
                         <div className="flex-1">
-                          <label className="text-[10px] text-slate-400 block">Preço Unit. (R$)</label>
-                          <input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            value={item.unit_price}
-                            onChange={(e) => {
-                              const updated = [...quoteItems];
-                              updated[idx].unit_price = parseFloat(e.target.value) || 0;
-                              setQuoteItems(updated);
-                            }}
-                            className="w-full p-1 border rounded-lg text-right"
-                          />
+                          <label className="text-[10px] text-slate-500 font-bold block mb-0.5">
+                            Preço Unit. (R$)
+                          </label>
+                          <div className="relative flex items-center">
+                            <span className="absolute left-2 text-[10px] font-bold text-slate-400 select-none pointer-events-none">
+                              R$
+                            </span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={
+                                item.raw_price_str !== undefined
+                                  ? item.raw_price_str
+                                  : formatBRLAmount(item.unit_price)
+                              }
+                              placeholder="0,00"
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const parsed = parseCurrencyInput(val);
+                                const updated = [...quoteItems];
+                                updated[idx].raw_price_str = val;
+                                updated[idx].unit_price = parsed;
+                                setQuoteItems(updated);
+                              }}
+                              onBlur={() => {
+                                const updated = [...quoteItems];
+                                updated[idx].raw_price_str =
+                                  updated[idx].unit_price > 0
+                                    ? formatBRLAmount(updated[idx].unit_price)
+                                    : '';
+                                setQuoteItems(updated);
+                              }}
+                              className="w-full pl-6 pr-2 py-1 text-xs border border-slate-300 rounded-lg text-right font-semibold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none"
+                            />
+                          </div>
                         </div>
                         <div className="flex-1 text-right">
-                          <label className="text-[10px] text-slate-400 block">Subtotal</label>
-                          <span className="font-bold text-slate-800">
-                            R$ {(item.quantity * item.unit_price).toFixed(2)}
+                          <label className="text-[10px] text-slate-500 font-bold block mb-0.5">Subtotal</label>
+                          <span className="font-bold text-slate-900 text-xs block py-1">
+                            {formatCurrencyBRL((item.quantity || 1) * (item.unit_price || 0))}
                           </span>
                         </div>
                       </div>
@@ -1328,7 +1390,7 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-600 mt-1">
-                      Total: <strong>R$ {timelineTicket.quote.total_amount.toFixed(2)}</strong> ({timelineTicket.quote.items.length} itens)
+                      Total: <strong>{formatCurrencyBRL(timelineTicket.quote.total_amount)}</strong> ({timelineTicket.quote.items.length} itens)
                     </p>
                     {timelineTicket.quote.decision_reason && (
                       <p className="text-[11px] text-rose-600 mt-1">

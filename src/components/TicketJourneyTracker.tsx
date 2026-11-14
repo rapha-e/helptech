@@ -48,7 +48,9 @@ export const TicketJourneyTracker: React.FC<TicketJourneyTrackerProps> = ({ tick
     {
       id: 'pecas_orcamento',
       label: 'Orçamento & Logística',
-      desc: ticket.quote ? `R$ ${ticket.quote.total_amount.toFixed(2)} (${ticket.quote.status})` : 'Sem pendência de peças',
+      desc: ticket.quote
+        ? `R$ ${ticket.quote.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${ticket.quote.status})`
+        : 'Sem pendência de peças',
       icon: PackageCheck,
       active: ['aguardando_orcamento', 'aguardando_peca', 'aguardando_terceiro', 'concluido'].includes(ticket.status),
       done: ['concluido'].includes(ticket.status)

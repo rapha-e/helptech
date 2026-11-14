@@ -134,7 +134,7 @@ export const OfficialAuditReportModal: React.FC<OfficialAuditReportModalProps> =
                       </td>
                       <td className="p-2.5 text-slate-700">{t.assigned_technician_name || '—'}</td>
                       <td className="p-2.5 text-right font-bold text-slate-900">
-                        R$ {(t.quote?.total_amount || 0).toFixed(2)}
+                        R$ {(t.quote?.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                     </tr>
                   ))}
