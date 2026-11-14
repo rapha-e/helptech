@@ -301,11 +301,13 @@ export const App: React.FC = () => {
                 onRefuseTicket={refuseTicket}
                 onCheckIn={checkInTechnician}
                 onSubmitQuote={submitQuote}
+                onDecideQuote={decideQuote}
                 onCompleteTicket={completeTicket}
                 onScheduleVisit={scheduleVisit}
                 onSetWaitingParts={setWaitingParts}
                 onSetWaitingThirdParty={setWaitingThirdParty}
                 onResumeService={resumeService}
+                onAddTicketNote={addTicketNote}
                 onViewOS={(ticket) => setViewingOsTicket(ticket)}
               />
             ) : (

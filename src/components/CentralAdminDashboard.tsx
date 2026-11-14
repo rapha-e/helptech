@@ -109,15 +109,27 @@ export const KANBAN_STAGES_FLOW: {
   stepNumber: number;
 }[] = [
   { status: 'aberto', label: '1. Triagem / Aberto', stepNumber: 1 },
-  { status: 'despachado', label: '2. Despachado (Timeout 20m)', stepNumber: 2 },
-  { status: 'visita_agendada', label: '3. Visita Agendada', stepNumber: 3 },
-  { status: 'em_deslocamento', label: '4. Em Rota / Deslocamento', stepNumber: 4 },
-  { status: 'em_atendimento', label: '5. Em Atendimento Presencial', stepNumber: 5 },
-  { status: 'aguardando_orcamento', label: '6. Aguardando Orçamento', stepNumber: 6 },
-  { status: 'aguardando_peca', label: '7. Aguardando Peça', stepNumber: 7 },
-  { status: 'aguardando_terceiro', label: '8. Aguardando Terceiro', stepNumber: 8 },
-  { status: 'concluido', label: '9. Concluído & Assinado', stepNumber: 9 },
-  { status: 'cancelado', label: '10. Cancelado', stepNumber: 10 }
+  { status: 'despachado', label: '2. Despachado', stepNumber: 2 },
+  { status: 'em_deslocamento', label: '3. Em Rota / Deslocamento', stepNumber: 3 },
+  { status: 'em_atendimento', label: '4. Em Atendimento no Local', stepNumber: 4 },
+  { status: 'aguardando_orcamento', label: '⏳ Aguardando Aprovação de Orçamento', stepNumber: 5 },
+  { status: 'visita_agendada', label: '⏸️ Pausado: Visita Agendada', stepNumber: 6 },
+  { status: 'aguardando_peca', label: '⏸️ Pausado: Aguardando Peça', stepNumber: 7 },
+  { status: 'aguardando_terceiro', label: '⏸️ Pausado: Aguardando Terceiro', stepNumber: 8 },
+  { status: 'concluido', label: '5. Concluído & Assinado', stepNumber: 9 },
+  { status: 'cancelado', label: 'Cancelado', stepNumber: 10 }
+];
+
+// Fluxo principal direto (sem forçar passagem por pausas de peça ou terceiro)
+export const MAIN_WORKFLOW_STEPS: {
+  status: Ticket['status'];
+  label: string;
+}[] = [
+  { status: 'aberto', label: '1. Triagem' },
+  { status: 'despachado', label: '2. Despachado' },
+  { status: 'em_deslocamento', label: '3. Em Rota' },
+  { status: 'em_atendimento', label: '4. Em Atendimento' },
+  { status: 'concluido', label: '5. Concluído' }
 ];
 
 export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
@@ -139,7 +151,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   onDeleteSystemUser,
   onToggleSystemUserActive,
   onAdminUpdateTicket,
-  onAddTicketNote: _onAddTicketNote,
+  onAddTicketNote,
   onResetDatabase,
   inventory = [],
   onUpdateInventoryQuantity = () => {},
@@ -163,6 +175,8 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   const [showEditTicketModal, setShowEditTicketModal] = useState(false);
   const [cardTechSelect, setCardTechSelect] = useState<Record<string, string>>({});
   const [changingTechTicketId, setChangingTechTicketId] = useState<string | null>(null);
+  const [cardQuickNote, setCardQuickNote] = useState<Record<string, string>>({});
+  const [addingNoteTicketId, setAddingNoteTicketId] = useState<string | null>(null);
   const [editTicketForm, setEditTicketForm] = useState<{
     status: Ticket['status'];
     technicianId: string;
@@ -416,39 +430,44 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
     return acc;
   }, 0);
 
-  // Colunas do Kanban
+  // Colunas do Kanban Simplificadas e Funcionais
   const kanbanColumns = [
     {
       id: 'aberto',
-      title: 'Triagem / Aguardando Despacho',
+      title: '1. Novos / Triagem',
+      subtitle: 'Aguardando atribuição de técnico',
       bgHeader: 'bg-slate-100 text-slate-800 border-slate-300',
       items: filteredTickets.filter((t) => t.status === 'aberto')
     },
     {
       id: 'despachado',
-      title: 'Despachado (Timeout 20m)',
+      title: '2. Despachados / Em Rota',
+      subtitle: 'Técnico acionado ou em deslocamento',
       bgHeader: 'bg-amber-100 text-amber-900 border-amber-300',
-      items: filteredTickets.filter((t) => t.status === 'despachado')
-    },
-    {
-      id: 'em_atendimento',
-      title: 'Agendado / Em Rota / Campo',
-      bgHeader: 'bg-blue-100 text-blue-900 border-blue-300',
       items: filteredTickets.filter((t) =>
-        ['visita_agendada', 'em_deslocamento', 'em_atendimento'].includes(t.status)
+        ['despachado', 'em_deslocamento'].includes(t.status)
       )
     },
     {
+      id: 'em_atendimento',
+      title: '3. Em Atendimento',
+      subtitle: 'Execução presencial no local',
+      bgHeader: 'bg-blue-100 text-blue-900 border-blue-300',
+      items: filteredTickets.filter((t) => t.status === 'em_atendimento')
+    },
+    {
       id: 'aguardando_orcamento',
-      title: 'Orçamento, Peças & Terceiros',
+      title: '4. Orçamento / Pausados',
+      subtitle: 'Aprovação do cliente ou pausa técnica',
       bgHeader: 'bg-purple-100 text-purple-900 border-purple-300',
       items: filteredTickets.filter((t) =>
-        ['aguardando_orcamento', 'aguardando_peca', 'aguardando_terceiro'].includes(t.status)
+        ['aguardando_orcamento', 'visita_agendada', 'aguardando_peca', 'aguardando_terceiro'].includes(t.status)
       )
     },
     {
       id: 'concluido',
-      title: 'Concluído & Assinado',
+      title: '5. Concluídos',
+      subtitle: 'Finalizados e assinados',
       bgHeader: 'bg-emerald-100 text-emerald-900 border-emerald-300',
       items: filteredTickets.filter((t) => t.status === 'concluido')
     }
@@ -706,10 +725,13 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                 className="bg-slate-100/90 rounded-2xl p-3 border border-slate-200 space-y-3 min-h-[480px]"
               >
                 <div
-                  className={`px-3 py-2 rounded-xl text-xs font-bold border flex items-center justify-between ${col.bgHeader}`}
+                  className={`px-3 py-2 rounded-xl border flex items-center justify-between ${col.bgHeader}`}
                 >
-                  <span className="truncate">{col.title}</span>
-                  <span className="px-1.5 py-0.5 bg-white/70 rounded text-[11px] font-mono">
+                  <div className="min-w-0">
+                    <span className="text-xs font-extrabold block truncate">{col.title}</span>
+                    <span className="text-[10px] opacity-75 block truncate">{col.subtitle}</span>
+                  </div>
+                  <span className="px-2 py-0.5 bg-white/80 rounded-lg text-xs font-black font-mono shrink-0 shadow-2xs">
                     {col.items.length}
                   </span>
                 </div>
@@ -870,72 +892,163 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                         )}
                       </div>
 
-                      {/* Controle de Etapas da OS (Avançar e Retornar) */}
+                      {/* Controle de Etapas Inteligente (Fluxo Direto s/ forçar Peça ou Terceiro) */}
                       {(() => {
-                        const currentIdx = KANBAN_STAGES_FLOW.findIndex(
-                          (s) => s.status === ticket.status
-                        );
-                        const currentStage = KANBAN_STAGES_FLOW[currentIdx] || {
-                          label: ticket.status,
-                          stepNumber: currentIdx + 1
-                        };
-                        const prevStage = currentIdx > 0 ? KANBAN_STAGES_FLOW[currentIdx - 1] : null;
-                        const nextStage =
-                          currentIdx >= 0 &&
-                          currentIdx < KANBAN_STAGES_FLOW.length - 1 &&
-                          KANBAN_STAGES_FLOW[currentIdx + 1].status !== 'cancelado'
-                            ? KANBAN_STAGES_FLOW[currentIdx + 1]
+                        const isPausedState = ['visita_agendada', 'aguardando_peca', 'aguardando_terceiro'].includes(ticket.status);
+                        const isWaitingQuote = ticket.status === 'aguardando_orcamento';
+                        const hasPendingQuote = Boolean(ticket.quote && ticket.quote.status === 'pendente');
+
+                        if (isPausedState) {
+                          const pauseLabel =
+                            ticket.status === 'aguardando_peca'
+                              ? '⏸️ Pausado: Aguardando Peça'
+                              : ticket.status === 'aguardando_terceiro'
+                              ? '⏸️ Pausado: Aguardando Terceiro'
+                              : '📅 Pausado: Visita Agendada';
+
+                          return (
+                            <div className="pt-1.5 space-y-1.5">
+                              <div className="px-2 py-1 bg-purple-50 border border-purple-200 rounded-lg text-[10px] font-bold text-purple-900 flex items-center justify-between">
+                                <span>{pauseLabel}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleQuickMoveStage(ticket, 'em_atendimento')}
+                                className="w-full py-1.5 px-2 text-[10px] font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-xs flex items-center justify-center gap-1 transition-colors"
+                              >
+                                ▶️ Retomar Atendimento
+                              </button>
+                            </div>
+                          );
+                        }
+
+                        if (isWaitingQuote) {
+                          return null; // O card já exibe os botões de Aprovar / Reprovar / WhatsApp logo abaixo
+                        }
+
+                        const mainIdx = MAIN_WORKFLOW_STEPS.findIndex((s) => s.status === ticket.status);
+                        const currentLabel =
+                          MAIN_WORKFLOW_STEPS[mainIdx]?.label ||
+                          KANBAN_STAGES_FLOW.find((s) => s.status === ticket.status)?.label ||
+                          ticket.status;
+                        const prevStep = mainIdx > 0 ? MAIN_WORKFLOW_STEPS[mainIdx - 1] : null;
+                        const nextStep =
+                          mainIdx >= 0 && mainIdx < MAIN_WORKFLOW_STEPS.length - 1
+                            ? MAIN_WORKFLOW_STEPS[mainIdx + 1]
                             : null;
 
                         return (
                           <div className="pt-1.5 space-y-1">
                             <div className="flex items-center justify-between text-[10px]">
-                              <span className="text-slate-400 font-semibold">Etapa:</span>
+                              <span className="text-slate-400 font-semibold">Etapa Atual:</span>
                               <span
-                                className="font-bold text-slate-700 truncate max-w-[130px]"
-                                title={currentStage.label}
+                                className="font-bold text-slate-700 truncate max-w-[140px]"
+                                title={currentLabel}
                               >
-                                {currentStage.label}
+                                {currentLabel}
                               </span>
                             </div>
+
+                            {ticket.quote && ticket.quote.status === 'aprovado' && (
+                              <div className="px-2 py-0.5 bg-emerald-50 border border-emerald-200 rounded text-[9.5px] font-bold text-emerald-800 flex items-center justify-between">
+                                <span>✅ Orçamento Aprovado</span>
+                                <span>R$ {ticket.quote.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                              </div>
+                            )}
+
                             <div className="grid grid-cols-2 gap-1">
                               <button
                                 type="button"
-                                disabled={!prevStage}
-                                onClick={() => prevStage && handleQuickMoveStage(ticket, prevStage.status)}
-                                className="py-1 px-1.5 text-[9px] font-bold bg-slate-100 hover:bg-slate-200 disabled:opacity-40 disabled:hover:bg-slate-100 text-slate-700 rounded border border-slate-200 flex items-center justify-center gap-1 transition-colors"
-                                title={prevStage ? `Retornar para: ${prevStage.label}` : 'Primeira etapa'}
+                                disabled={!prevStep}
+                                onClick={() => prevStep && handleQuickMoveStage(ticket, prevStep.status)}
+                                className="py-1 px-1.5 text-[9.5px] font-bold bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-700 rounded border border-slate-200 flex items-center justify-center gap-1 transition-colors"
+                                title={prevStep ? `Voltar para: ${prevStep.label}` : 'Primeira etapa'}
                               >
                                 ◀ Retornar
                               </button>
                               <button
                                 type="button"
-                                disabled={!nextStage}
-                                onClick={() => nextStage && handleQuickMoveStage(ticket, nextStage.status)}
-                                className="py-1 px-1.5 text-[9px] font-bold bg-blue-50 hover:bg-blue-100 disabled:opacity-40 disabled:hover:bg-blue-50 text-blue-700 rounded border border-blue-200 flex items-center justify-center gap-1 transition-colors"
-                                title={nextStage ? `Avançar para: ${nextStage.label}` : 'Última etapa'}
+                                disabled={!nextStep || (nextStep.status === 'concluido' && hasPendingQuote)}
+                                onClick={() => nextStep && handleQuickMoveStage(ticket, nextStep.status)}
+                                className="py-1 px-1.5 text-[9.5px] font-bold bg-blue-50 hover:bg-blue-100 disabled:opacity-40 text-blue-700 rounded border border-blue-200 flex items-center justify-center gap-1 transition-colors"
+                                title={
+                                  nextStep?.status === 'concluido' && hasPendingQuote
+                                    ? 'Aprove o orçamento antes de concluir'
+                                    : nextStep
+                                    ? `Avançar para: ${nextStep.label}`
+                                    : 'Etapa concluída'
+                                }
                               >
-                                Avançar ▶
+                                {nextStep ? `Ir p/ ${nextStep.label.split('. ')[1] || nextStep.label} ▶` : 'Concluído ✓'}
                               </button>
                             </div>
+
+                            {/* Opções rápidas de Pausa se estiver em Atendimento */}
+                            {ticket.status === 'em_atendimento' && (
+                              <div className="flex items-center gap-1 pt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickMoveStage(ticket, 'aguardando_peca')}
+                                  className="flex-1 py-0.5 px-1 text-[9px] font-semibold bg-slate-50 hover:bg-purple-50 text-slate-600 hover:text-purple-700 rounded border border-slate-200 transition-colors"
+                                  title="Pausar chamado para aguardar peça"
+                                >
+                                  ⏸️ Pausar (Peça)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickMoveStage(ticket, 'aguardando_terceiro')}
+                                  className="flex-1 py-0.5 px-1 text-[9px] font-semibold bg-slate-50 hover:bg-purple-50 text-slate-600 hover:text-purple-700 rounded border border-slate-200 transition-colors"
+                                  title="Pausar chamado para aguardar terceiro"
+                                >
+                                  ⏸️ Pausar (Terceiro)
+                                </button>
+                              </div>
+                            )}
                           </div>
                         );
                       })()}
 
-                      {/* Decisão rápida de Orçamento no Kanban */}
+                      {/* Decisão rápida de Orçamento + Envio WhatsApp no Kanban */}
                       {ticket.status === 'aguardando_orcamento' && ticket.quote && ticket.quote.status === 'pendente' && (
-                        <div className="pt-2 border-t border-amber-200 bg-amber-50/70 p-2 rounded-lg space-y-1.5">
-                          <div className="flex items-center justify-between text-[10px] font-bold text-amber-900">
-                            <span>Orçamento: R$ {ticket.quote.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        <div className="pt-2 border-t border-amber-200 bg-amber-50/90 p-2.5 rounded-xl space-y-1.5">
+                          <div className="flex items-center justify-between text-[10px] font-bold text-amber-950">
+                            <span>💰 Orçamento: R$ {ticket.quote.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             <span className="text-amber-700 font-semibold">{ticket.quote.items.length} item(ns)</span>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const cleanPhone = ticket.requester_phone.replace(/\D/g, '');
+                              const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+                              const approvalLink = `${window.location.origin}/?protocol=${encodeURIComponent(ticket.protocol)}`;
+                              const itemsList = ticket.quote!.items
+                                .map((it) => `• ${it.quantity}x ${it.item_name}: R$ ${it.subtotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`)
+                                .join('\n');
+                              const text = [
+                                `Olá *${ticket.requester_name}* (${ticket.school_name})!`,
+                                `Segue o orçamento da OS *${ticket.protocol}* (HELP TECH INFO):`,
+                                ``,
+                                `*Diagnóstico:* ${ticket.quote!.technical_diagnosis}`,
+                                `*Itens:*`,
+                                itemsList,
+                                `*TOTAL:* *R$ ${ticket.quote!.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*`,
+                                ``,
+                                `👉 *Aprove ou analise online pelo link:*`,
+                                approvalLink
+                              ].join('\n');
+                              window.open(`https://wa.me/${fullPhone}?text=${encodeURIComponent(text)}`, '_blank');
+                            }}
+                            className="w-full py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-bold rounded-lg shadow-2xs flex items-center justify-center gap-1 transition-colors"
+                          >
+                            📲 Enviar Orçamento p/ Cliente (WhatsApp)
+                          </button>
                           <div className="flex gap-1">
                             <button
                               type="button"
-                              onClick={() => onDecideQuote(ticket.id, true, 'Controladoria Central / CRE')}
-                              className="flex-1 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded shadow-xs"
+                              onClick={() => onDecideQuote(ticket.id, true, 'Aprovado (Controladoria / Cliente)')}
+                              className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded-lg shadow-xs"
                             >
-                              Aprovar
+                              ✅ Aprovar
                             </button>
                             <button
                               type="button"
@@ -943,11 +1056,60 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                                 setRejectingQuoteTicket(ticket);
                                 setQuoteDecisionReason('');
                               }}
-                              className="flex-1 py-1 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold rounded shadow-xs"
+                              className="flex-1 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold rounded-lg shadow-xs"
                             >
-                              Reprovar / Cancelar
+                              ❌ Reprovar
                             </button>
                           </div>
+                        </div>
+                      )}
+
+                      {/* Adicionar Nota Rápida direto no Card */}
+                      {onAddTicketNote && (
+                        <div className="pt-1">
+                          {addingNoteTicketId === ticket.id ? (
+                            <div className="flex gap-1 animate-fadeIn">
+                              <input
+                                type="text"
+                                value={cardQuickNote[ticket.id] || ''}
+                                onChange={(e) =>
+                                  setCardQuickNote({ ...cardQuickNote, [ticket.id]: e.target.value })
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && (cardQuickNote[ticket.id] || '').trim()) {
+                                    e.preventDefault();
+                                    onAddTicketNote(ticket.id, cardQuickNote[ticket.id].trim());
+                                    setCardQuickNote({ ...cardQuickNote, [ticket.id]: '' });
+                                    setAddingNoteTicketId(null);
+                                  }
+                                }}
+                                placeholder="Digite uma nota rápida..."
+                                className="flex-1 text-[10px] p-1 border border-slate-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const txt = (cardQuickNote[ticket.id] || '').trim();
+                                  if (txt) {
+                                    onAddTicketNote(ticket.id, txt);
+                                    setCardQuickNote({ ...cardQuickNote, [ticket.id]: '' });
+                                  }
+                                  setAddingNoteTicketId(null);
+                                }}
+                                className="px-2 py-1 bg-blue-600 text-white rounded text-[9.5px] font-bold"
+                              >
+                                OK
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setAddingNoteTicketId(ticket.id)}
+                              className="w-full py-1 text-[9.5px] font-semibold text-slate-500 hover:text-blue-700 hover:bg-blue-50/60 rounded border border-dashed border-slate-200 transition-colors"
+                            >
+                              + Inserir Nota no Chamado
+                            </button>
+                          )}
                         </div>
                       )}
 

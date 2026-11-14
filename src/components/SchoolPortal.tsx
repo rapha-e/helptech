@@ -329,6 +329,43 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
 
   return (
     <div className="w-full space-y-4">
+      {/* ALERTA AUTOMÁTICO DE ORÇAMENTOS PENDENTES DE APROVAÇÃO PELO CLIENTE */}
+      {tickets.filter((t) => t.status === 'aguardando_orcamento' && t.quote?.status === 'pendente').length > 0 && (
+        <div className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-4 shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fadeIn">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 bg-amber-500 text-white rounded-xl shrink-0 shadow-xs">
+              <AlertTriangle size={20} />
+            </div>
+            <div>
+              <h3 className="text-xs sm:text-sm font-black text-amber-950 uppercase tracking-tight">
+                🔔 Orçamento Técnico Aguardando Aprovação do Cliente / Gestor
+              </h3>
+              <p className="text-xs text-amber-800 mt-0.5">
+                Há {tickets.filter((t) => t.status === 'aguardando_orcamento' && t.quote?.status === 'pendente').length} chamado(s) aguardando autorização de orçamento para prosseguir com o serviço.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+            {tickets
+              .filter((t) => t.status === 'aguardando_orcamento' && t.quote?.status === 'pendente')
+              .map((pendingT) => (
+                <button
+                  key={pendingT.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('rastrear');
+                    setSearchPhoneOrProtocol(pendingT.protocol);
+                    setSelectedTrackedTicket(pendingT);
+                  }}
+                  className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow transition-colors flex items-center gap-1.5"
+                >
+                  <span>Analisar {pendingT.protocol} (R$ {pendingT.quote?.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) →</span>
+                </button>
+              ))}
+          </div>
+        </div>
+      )}
+
       {/* Top Banner Otimizado */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white p-5 shadow-lg border border-slate-800">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -1346,7 +1383,7 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                             );
                             setSelectedTrackedTicket({
                               ...selectedTrackedTicket,
-                              status: 'aguardando_peca',
+                              status: 'em_atendimento',
                               quote: {
                                 ...selectedTrackedTicket.quote!,
                                 status: 'aprovado',

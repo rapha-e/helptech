@@ -60,11 +60,13 @@ interface TechFieldPWAProps {
     lng: number
   ) => { success: boolean; distanceKm: number; message: string };
   onSubmitQuote: (ticketId: string, techId: string, data: QuoteSubmissionData) => void;
+  onDecideQuote?: (ticketId: string, approved: boolean, name: string, reason?: string) => void;
   onCompleteTicket: (ticketId: string, techId: string, data: TicketCompletionData) => boolean | void;
   onScheduleVisit?: (ticketId: string, scheduledAt: string, notes: string) => void;
   onSetWaitingParts?: (ticketId: string, partNotes: string) => void;
   onSetWaitingThirdParty?: (ticketId: string, thirdPartyNotes: string) => void;
   onResumeService?: (ticketId: string) => void;
+  onAddTicketNote?: (ticketId: string, note: string, authorName?: string, authorRole?: string) => void;
   onViewOS: (ticket: Ticket) => void;
 }
 
@@ -104,16 +106,19 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
   onRefuseTicket,
   onCheckIn,
   onSubmitQuote,
+  onDecideQuote,
   onCompleteTicket,
   onScheduleVisit,
   onSetWaitingParts,
   onSetWaitingThirdParty,
   onResumeService,
+  onAddTicketNote,
   onViewOS
 }) => {
   const [selectedTechId, setSelectedTechId] = useState<string>(technicians[0]?.id || '');
   const [refusalReason, setRefusalReason] = useState<string>('');
   const [refusalModalTicketId, setRefusalModalTicketId] = useState<string | null>(null);
+  const [techNoteInputs, setTechNoteInputs] = useState<Record<string, string>>({});
 
   // Agendamento de visita
   const [scheduleModalTicketId, setScheduleModalTicketId] = useState<string | null>(null);
@@ -174,6 +179,44 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
     window.open(`https://wa.me/${fullPhone}?text=${text}`, '_blank');
   };
 
+  const handleSendQuoteWhatsApp = (
+    phone: string,
+    protocol: string,
+    schoolName: string,
+    requesterName: string,
+    diagnosis: string,
+    items: { item_name: string; quantity: number; unit_price: number }[],
+    totalAmount: number
+  ) => {
+    const cleanPhone = phone.replace(/\D/g, '');
+    const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+    const approvalLink = `${window.location.origin}/?protocol=${encodeURIComponent(protocol)}`;
+    const itemsText = items
+      .map(
+        (it) =>
+          `• ${it.quantity}x ${it.item_name}: ${formatCurrencyBRL(
+            (it.quantity || 1) * (it.unit_price || 0)
+          )}`
+      )
+      .join('\n');
+
+    const msg = [
+      `Olá *${requesterName}* (${schoolName})!`,
+      `Segue o orçamento técnico referente à Ordem de Serviço *${protocol}* (HELP TECH INFO):`,
+      ``,
+      `*Diagnóstico Técnico:* ${diagnosis}`,
+      ``,
+      `*Itens do Orçamento:*`,
+      itemsText,
+      `*VALOR TOTAL:* *${formatCurrencyBRL(totalAmount)}*`,
+      ``,
+      `👉 *Para aprovar ou analisar este orçamento online, acesse o link direto:*`,
+      approvalLink
+    ].join('\n');
+
+    window.open(`https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+  };
+
   // Técnico selecionado
   const currentTech = technicians.find((t) => t.id === selectedTechId);
 
@@ -185,11 +228,11 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
 
   // Separação refinada para acompanhamento completo pelo técnico
   const inProgressTickets = techTickets.filter((t) =>
-    ['visita_agendada', 'em_deslocamento', 'em_atendimento'].includes(t.status)
+    ['em_deslocamento', 'em_atendimento', 'aguardando_orcamento'].includes(t.status)
   );
 
   const waitingTickets = techTickets.filter((t) =>
-    ['aguardando_orcamento', 'aguardando_peca', 'aguardando_terceiro'].includes(t.status)
+    ['visita_agendada', 'aguardando_orcamento', 'aguardando_peca', 'aguardando_terceiro'].includes(t.status)
   );
 
   const completedTickets = techTickets.filter((t) => t.status === 'concluido');
@@ -754,11 +797,11 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
             )}
 
             {/* BOTÕES DE FLUXO CONFORME O STATUS DO CHAMADO */}
-            <div className="space-y-2 pt-1 border-t border-slate-100">
+            <div className="space-y-2.5 pt-1 border-t border-slate-100">
               {ticket.status === 'visita_agendada' && (
                 <div className="p-3 bg-purple-50 rounded-2xl border border-purple-200 text-xs text-purple-900 space-y-1.5">
                   <div className="font-bold flex items-center gap-1.5">
-                    <Calendar size={14} className="text-purple-600" /> Visita Técnica Agendada
+                    <Calendar size={14} className="text-purple-600" /> ⏸️ Chamado Pausado (Visita Agendada)
                   </div>
                   <p className="text-[11.5px]">
                     Data/Hora: <strong>{ticket.scheduled_visit_at ? new Date(ticket.scheduled_visit_at).toLocaleString('pt-BR') : 'A definir'}</strong>
@@ -767,10 +810,10 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
                     <p className="text-[11px] text-purple-700">Obs: {ticket.scheduled_visit_notes}</p>
                   )}
                   <button
-                    onClick={() => handleAcceptTicket(ticket.id)}
+                    onClick={() => (onResumeService ? onResumeService(ticket.id) : handleAcceptTicket(ticket.id))}
                     className="w-full mt-2 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
                   >
-                    <Navigation size={14} /> Iniciar Deslocamento Agora
+                    <Navigation size={14} /> ▶️ Retomar Atendimento Agora
                   </button>
                 </div>
               )}
@@ -785,7 +828,20 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
               )}
 
               {ticket.status === 'em_atendimento' && (
-                <div className="space-y-2">
+                <div className="space-y-2.5">
+                  {/* SE JÁ TIVER ORÇAMENTO APROVADO, DESTACA NA TELA */}
+                  {ticket.quote && ticket.quote.status === 'aprovado' && (
+                    <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-900 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                        <span>Orçamento Aprovado pelo Cliente!</span>
+                      </div>
+                      <span className="font-mono font-black text-emerald-800">
+                        {formatCurrencyBRL(ticket.quote.total_amount)}
+                      </span>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => {
@@ -794,96 +850,144 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
                       }}
                       className="py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-xs font-bold transition-colors flex items-center justify-center gap-1 shadow"
                     >
-                      <FileSpreadsheet size={15} /> Lançar Orçamento
+                      <FileSpreadsheet size={15} />{' '}
+                      {ticket.quote ? 'Atualizar Orçamento' : 'Lançar Orçamento'}
                     </button>
                     <button
                       onClick={() => {
+                        if (ticket.quote && ticket.quote.status === 'pendente') {
+                          alert('Atenção: O orçamento deste chamado ainda está pendente de aprovação pelo cliente.');
+                          return;
+                        }
                         setCompletionTicketId(ticket.id);
                         setQuoteTicketId(null);
                         setSchoolRepName(ticket.requester_name);
                       }}
                       className="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-colors flex items-center justify-center gap-1 shadow"
                     >
-                      <CheckCircle2 size={15} /> Concluir com Assinatura
+                      <CheckCircle2 size={15} /> Concluir c/ Assinatura
                     </button>
                   </div>
 
-                  {/* Sub-ações de controle de espera */}
-                  <div className="grid grid-cols-2 gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setPartsModalTicketId(ticket.id)}
-                      className="py-1.5 px-2 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 border border-slate-200 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-1 transition-colors"
-                    >
-                      <Package size={13} /> Aguardar Peça
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setThirdPartyModalTicketId(ticket.id)}
-                      className="py-1.5 px-2 bg-slate-100 hover:bg-amber-50 hover:text-amber-700 text-slate-700 border border-slate-200 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-1 transition-colors"
-                    >
-                      <ExternalLink size={13} /> Aguardar Terceiro
-                    </button>
+                  {/* Opções de Pausa do Chamado (Apenas quando necessário) */}
+                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                      ⏸️ Pausar Chamado (Somente se necessário):
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPartsModalTicketId(ticket.id)}
+                        className="py-1.5 px-2 bg-white hover:bg-blue-50 hover:text-blue-700 text-slate-700 border border-slate-200 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-1 transition-colors"
+                      >
+                        <Package size={13} /> Aguardar Peça
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setThirdPartyModalTicketId(ticket.id)}
+                        className="py-1.5 px-2 bg-white hover:bg-amber-50 hover:text-amber-700 text-slate-700 border border-slate-200 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-1 transition-colors"
+                      >
+                        <ExternalLink size={13} /> Aguardar Terceiro
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
 
               {ticket.status === 'aguardando_orcamento' && (
-                <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 space-y-2">
-                  <div className="font-bold flex items-center gap-1">
-                    <Clock size={13} /> Orçamento em Análise pelo Gestor
+                <div className="p-3.5 bg-amber-50 rounded-2xl border-2 border-amber-300 text-xs text-amber-950 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="font-extrabold flex items-center gap-1.5 text-amber-900">
+                      <Clock size={15} className="text-amber-600" /> ⏳ Aguardando Aprovação do Orçamento
+                    </div>
+                    <span className="font-mono font-black text-sm text-amber-950 bg-amber-200/70 px-2 py-0.5 rounded-lg">
+                      {formatCurrencyBRL(ticket.quote?.total_amount || 0)}
+                    </span>
                   </div>
-                  <p className="text-[11px]">
-                    Total orçado: {formatCurrencyBRL(ticket.quote?.total_amount || 0)}. Aguardando aprovação digital da escola.
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    A conclusão da OS fica bloqueada até que o cliente aprove o orçamento. Envie o link direto pelo WhatsApp ou registre a aprovação presencial:
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCompletionTicketId(ticket.id);
-                      setQuoteTicketId(null);
-                      setSchoolRepName(ticket.requester_name);
-                    }}
-                    className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-xs"
-                  >
-                    <CheckCircle2 size={14} /> Concluir com Assinatura
-                  </button>
+
+                  <div className="space-y-1.5">
+                    {ticket.quote && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleSendQuoteWhatsApp(
+                            ticket.requester_phone,
+                            ticket.protocol,
+                            ticket.school_name,
+                            ticket.requester_name,
+                            ticket.quote!.technical_diagnosis,
+                            ticket.quote!.items,
+                            ticket.quote!.total_amount
+                          )
+                        }
+                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                      >
+                        <MessageSquare size={14} /> 📲 Enviar Orçamento p/ Cliente no WhatsApp
+                      </button>
+                    )}
+
+                    {onDecideQuote && (
+                      <div className="grid grid-cols-2 gap-1.5 pt-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onDecideQuote(
+                              ticket.id,
+                              true,
+                              `${ticket.requester_name} (Autorizado ao Técnico)`
+                            )
+                          }
+                          className="py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[11px] font-bold transition-colors flex items-center justify-center gap-1 shadow-xs"
+                        >
+                          <CheckCircle2 size={13} /> Cliente Aprovou
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const reason = window.prompt(
+                              'Informe o motivo da recusa do orçamento pelo cliente:',
+                              'Orçamento não autorizado pelo cliente.'
+                            );
+                            if (reason) {
+                              onDecideQuote(ticket.id, false, ticket.requester_name, reason);
+                            }
+                          }}
+                          className="py-2 bg-white hover:bg-rose-50 text-rose-600 border border-rose-300 rounded-xl text-[11px] font-bold transition-colors flex items-center justify-center gap-1"
+                        >
+                          <XCircle size={13} /> Cliente Recusou
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
               {ticket.status === 'aguardando_peca' && (
                 <div className="p-3 bg-blue-50 rounded-2xl border border-blue-200 text-xs text-blue-900 space-y-2">
                   <div className="font-bold flex items-center gap-1.5">
-                    <Package size={14} className="text-blue-600" /> Aguardando Envio de Peça de Reposição
+                    <Package size={14} className="text-blue-600" /> ⏸️ Chamado Pausado: Aguardando Peça
                   </div>
                   <p className="text-[11px] text-slate-700">
                     Peça solicitada: <strong>{ticket.pending_part_notes || 'Componente em solicitação'}</strong>
                   </p>
-                  <div className="grid grid-cols-2 gap-2 pt-1">
-                    {onResumeService && (
-                      <button
-                        onClick={() => onResumeService(ticket.id)}
-                        className="py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1"
-                      >
-                        <Wrench size={13} /> Peça Chegou (Retomar)
-                      </button>
-                    )}
+                  {onResumeService && (
                     <button
-                      onClick={() => {
-                        setCompletionTicketId(ticket.id);
-                        setSchoolRepName(ticket.requester_name);
-                      }}
-                      className="py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1"
+                      onClick={() => onResumeService(ticket.id)}
+                      className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 shadow-xs"
                     >
-                      <CheckCircle2 size={13} /> Finalizar OS
+                      <Wrench size={13} /> ▶️ Peça Recebida (Retomar Atendimento)
                     </button>
-                  </div>
+                  )}
                 </div>
               )}
 
               {ticket.status === 'aguardando_terceiro' && (
                 <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 space-y-2">
                   <div className="font-bold flex items-center gap-1.5">
-                    <ExternalLink size={14} className="text-amber-600" /> Aguardando Concessionária / Terceiro
+                    <ExternalLink size={14} className="text-amber-600" /> ⏸️ Chamado Pausado: Aguardando Terceiro
                   </div>
                   <p className="text-[11px] text-slate-700">
                     Dependência: <strong>{ticket.third_party_notes || 'Atuação de provedor de internet ou concessionária elétrica.'}</strong>
@@ -891,19 +995,98 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
                   {onResumeService && (
                     <button
                       onClick={() => onResumeService(ticket.id)}
-                      className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1"
+                      className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 shadow-xs"
                     >
-                      <Wrench size={13} /> Terceiro Atendeu (Retomar)
+                      <Wrench size={13} /> ▶️ Terceiro Concluiu (Retomar Atendimento)
                     </button>
                   )}
                 </div>
               )}
 
+              {/* BLOCO DE NOTAS E OBSERVAÇÕES DO TÉCNICO DIRETO NO CHAMADO */}
+              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                  <span>💬 Notas & Observações do Chamado</span>
+                  <span className="text-[10px] text-blue-600 font-semibold">
+                    {ticket.history?.length || 0} registro(s)
+                  </span>
+                </div>
+
+                {/* Exibe as últimas notas para o técnico acompanhar */}
+                {ticket.history && ticket.history.filter((h) => h.note).length > 0 ? (
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                    {ticket.history
+                      .filter((h) => h.note)
+                      .slice(0, 3)
+                      .map((h, i) => (
+                        <div
+                          key={h.id || i}
+                          className="p-2 bg-white rounded-xl border border-slate-200 text-[11px] space-y-0.5"
+                        >
+                          <div className="flex items-center justify-between text-[10px] text-slate-500">
+                            <strong className="text-slate-800">{h.author_name}</strong>
+                            <span>{new Date(h.created_at).toLocaleString('pt-BR')}</span>
+                          </div>
+                          <p className="text-slate-700 leading-snug">{h.note}</p>
+                        </div>
+                      ))}
+                  </div>
+                ) : ticket.notes ? (
+                  <div className="p-2 bg-white rounded-xl border border-slate-200 text-[11px] text-slate-700">
+                    {ticket.notes}
+                  </div>
+                ) : null}
+
+                {/* Campo para o técnico inserir nova nota */}
+                {onAddTicketNote && (
+                  <div className="flex gap-1.5 pt-1">
+                    <input
+                      type="text"
+                      value={techNoteInputs[ticket.id] || ''}
+                      onChange={(e) =>
+                        setTechNoteInputs({ ...techNoteInputs, [ticket.id]: e.target.value })
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && (techNoteInputs[ticket.id] || '').trim()) {
+                          e.preventDefault();
+                          onAddTicketNote(
+                            ticket.id,
+                            techNoteInputs[ticket.id].trim(),
+                            currentTech?.name || 'Técnico de Campo',
+                            'Técnico de Campo'
+                          );
+                          setTechNoteInputs({ ...techNoteInputs, [ticket.id]: '' });
+                        }
+                      }}
+                      placeholder="Adicionar nota técnica ao chamado..."
+                      className="flex-1 text-xs p-2 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const text = (techNoteInputs[ticket.id] || '').trim();
+                        if (!text) return;
+                        onAddTicketNote(
+                          ticket.id,
+                          text,
+                          currentTech?.name || 'Técnico de Campo',
+                          'Técnico de Campo'
+                        );
+                        setTechNoteInputs({ ...techNoteInputs, [ticket.id]: '' });
+                      }}
+                      className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors shrink-0 shadow-xs"
+                    >
+                      Salvar Nota
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <button
                 onClick={() => onViewOS(ticket)}
                 className="w-full py-1.5 text-slate-500 hover:text-slate-800 text-[11px] font-semibold flex items-center justify-center gap-1"
               >
-                <Eye size={12} /> Visualizar Prévia da OS
+                <Eye size={12} /> Visualizar / Imprimir OS Completa
               </button>
             </div>
 

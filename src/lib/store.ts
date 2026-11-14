@@ -944,7 +944,7 @@ export function useAppStore() {
     const target = tickets.find((t) => t.id === ticketId);
     if (!target) return;
 
-    const nextStatus = approved ? 'aguardando_peca' : 'cancelado';
+    const nextStatus = approved ? 'em_atendimento' : 'cancelado';
     const transitionVal = validateStateTransition(target.status, nextStatus, {
       quoteDecision: { approved, reason },
       cancelReason: reason
@@ -962,10 +962,10 @@ export function useAppStore() {
       from_status: target.status,
       to_status: nextStatus,
       author_name: decisionByName,
-      author_role: 'Gestão / Controladoria',
+      author_role: 'Cliente / Gestão',
       note: approved
-        ? 'Orçamento aprovado pela gestão.'
-        : `Orçamento reprovado: ${reason || 'Sem justificativa adicional.'}`
+        ? `Orçamento aprovado por ${decisionByName}. Liberado para execução/conclusão.`
+        : `Orçamento reprovado por ${decisionByName}: ${reason || 'Sem justificativa adicional.'}`
     };
 
     setTickets((prev) => {
@@ -1011,6 +1011,11 @@ export function useAppStore() {
   ): boolean => {
     const target = tickets.find((t) => t.id === ticketId);
     if (!target) return false;
+
+    if (target.status === 'aguardando_orcamento' || (target.quote && target.quote.status === 'pendente')) {
+      alert('Atenção: Este chamado possui um orçamento pendente de aprovação! O orçamento precisa ser aprovado pelo cliente antes de concluir a Ordem de Serviço.');
+      return false;
+    }
 
     const transitionVal = validateStateTransition(target.status, 'concluido', { completionData: data });
     if (!transitionVal.valid) {
@@ -1075,12 +1080,24 @@ export function useAppStore() {
   };
 
   /**
-   * 8. PWA Técnico: Agendar visita presencial com o gestor
+   * 8. PWA Técnico: Agendar visita presencial com o gestor (Pausa programada)
    */
   const scheduleVisit = (ticketId: string, scheduledAt: string, notes: string) => {
-    setTickets((prev) =>
-      prev.map((t) => {
+    const nowIso = new Date().toISOString();
+    setTickets((prev) => {
+      const next = prev.map((t) => {
         if (t.id === ticketId) {
+          const formattedDate = new Date(scheduledAt).toLocaleString('pt-BR');
+          const histEntry: TicketHistoryEntry = {
+            id: `hist-visit-${Date.now()}`,
+            created_at: nowIso,
+            action_type: 'status_change',
+            from_status: t.status,
+            to_status: 'visita_agendada',
+            author_name: t.assigned_technician_name || 'Técnico de Campo',
+            author_role: 'Técnico de Campo',
+            note: `Chamado pausado/agendado para ${formattedDate}. ${notes ? `Obs: ${notes}` : ''}`
+          };
           const notif = {
             id: `notif-visit-${Date.now()}`,
             ticket_id: t.id,
@@ -1089,15 +1106,17 @@ export function useAppStore() {
             recipient_phone_or_email: t.requester_phone,
             channel: 'whatsapp' as const,
             title: 'Visita Técnica Agendada',
-            message: `Olá ${t.requester_name}! O técnico HelpTech agendou a visita técnica para ${new Date(scheduledAt).toLocaleString('pt-BR')}. Obs: ${notes || 'Sem observações adicionais.'}`,
-            sent_at: new Date().toISOString()
+            message: `Olá ${t.requester_name}! O técnico HelpTech agendou a visita técnica para ${formattedDate}. Obs: ${notes || 'Sem observações adicionais.'}`,
+            sent_at: nowIso
           };
           return {
             ...t,
             status: 'visita_agendada' as const,
             scheduled_visit_at: scheduledAt,
             scheduled_visit_notes: notes,
-            updated_at: new Date().toISOString(),
+            notes: histEntry.note,
+            history: [histEntry, ...(t.history || [])],
+            updated_at: nowIso,
             notifications: [...(t.notifications || []), notif],
             dispatch_logs: [
               ...t.dispatch_logs,
@@ -1107,15 +1126,17 @@ export function useAppStore() {
                 technician_id: t.assigned_technician_id || 'unknown',
                 technician_name: t.assigned_technician_name || 'Técnico',
                 status: 'notificado' as const,
-                refusal_reason: `Visita agendada para ${new Date(scheduledAt).toLocaleString('pt-BR')}`,
-                created_at: new Date().toISOString()
+                refusal_reason: `Visita agendada para ${formattedDate}`,
+                created_at: nowIso
               }
             ]
           };
         }
         return t;
-      })
-    );
+      });
+      saveStoredTickets(next);
+      return next;
+    });
 
     updateRemoteTicketStatus(
       ticketId,
@@ -1126,12 +1147,23 @@ export function useAppStore() {
   };
 
   /**
-   * 9. PWA Técnico: Sinalizar Aguardando Peça com notificação
+   * 9. PWA Técnico: Sinalizar Aguardando Peça com notificação (Pausa opcional)
    */
   const setWaitingParts = (ticketId: string, partNotes: string) => {
-    setTickets((prev) =>
-      prev.map((t) => {
+    const nowIso = new Date().toISOString();
+    setTickets((prev) => {
+      const next = prev.map((t) => {
         if (t.id === ticketId) {
+          const histEntry: TicketHistoryEntry = {
+            id: `hist-part-${Date.now()}`,
+            created_at: nowIso,
+            action_type: 'status_change',
+            from_status: t.status,
+            to_status: 'aguardando_peca',
+            author_name: t.assigned_technician_name || 'Técnico de Campo',
+            author_role: 'Técnico de Campo',
+            note: `Chamado pausado (Aguardando Peça): ${partNotes}`
+          };
           const notif = {
             id: `notif-part-${Date.now()}`,
             ticket_id: t.id,
@@ -1141,19 +1173,23 @@ export function useAppStore() {
             channel: 'whatsapp' as const,
             title: 'Chamado em Espera de Peça de Reposição',
             message: `Chamado ${t.protocol}: o atendimento foi pausado aguardando envio do componente: ${partNotes}. A Central HelpTech já acionou o estoque.`,
-            sent_at: new Date().toISOString()
+            sent_at: nowIso
           };
           return {
             ...t,
             status: 'aguardando_peca' as const,
             pending_part_notes: partNotes,
-            updated_at: new Date().toISOString(),
+            notes: histEntry.note,
+            history: [histEntry, ...(t.history || [])],
+            updated_at: nowIso,
             notifications: [...(t.notifications || []), notif]
           };
         }
         return t;
-      })
-    );
+      });
+      saveStoredTickets(next);
+      return next;
+    });
 
     updateRemoteTicketStatus(
       ticketId,
@@ -1164,12 +1200,23 @@ export function useAppStore() {
   };
 
   /**
-   * 10. PWA Técnico / Central: Sinalizar Aguardando Serviço de Terceiros
+   * 10. PWA Técnico / Central: Sinalizar Aguardando Serviço de Terceiros (Pausa opcional)
    */
   const setWaitingThirdParty = (ticketId: string, thirdPartyNotes: string) => {
-    setTickets((prev) =>
-      prev.map((t) => {
+    const nowIso = new Date().toISOString();
+    setTickets((prev) => {
+      const next = prev.map((t) => {
         if (t.id === ticketId) {
+          const histEntry: TicketHistoryEntry = {
+            id: `hist-third-${Date.now()}`,
+            created_at: nowIso,
+            action_type: 'status_change',
+            from_status: t.status,
+            to_status: 'aguardando_terceiro',
+            author_name: t.assigned_technician_name || 'Técnico de Campo',
+            author_role: 'Técnico de Campo',
+            note: `Chamado pausado (Aguardando Terceiro): ${thirdPartyNotes}`
+          };
           const notif = {
             id: `notif-third-${Date.now()}`,
             ticket_id: t.id,
@@ -1179,19 +1226,23 @@ export function useAppStore() {
             channel: 'whatsapp' as const,
             title: 'Aguardando Atuação de Terceiros',
             message: `Chamado ${t.protocol}: identificada dependência de concessionária/terceiro: ${thirdPartyNotes}. Acompanhamento aberto com o provedor.`,
-            sent_at: new Date().toISOString()
+            sent_at: nowIso
           };
           return {
             ...t,
             status: 'aguardando_terceiro' as const,
             third_party_notes: thirdPartyNotes,
-            updated_at: new Date().toISOString(),
+            notes: histEntry.note,
+            history: [histEntry, ...(t.history || [])],
+            updated_at: nowIso,
             notifications: [...(t.notifications || []), notif]
           };
         }
         return t;
-      })
-    );
+      });
+      saveStoredTickets(next);
+      return next;
+    });
 
     updateRemoteTicketStatus(
       ticketId,
@@ -1202,21 +1253,36 @@ export function useAppStore() {
   };
 
   /**
-   * 11. Retomar atendimento
+   * 11. Retomar atendimento (Despausar chamado)
    */
   const resumeService = (ticketId: string) => {
-    setTickets((prev) =>
-      prev.map((t) => {
+    const nowIso = new Date().toISOString();
+    setTickets((prev) => {
+      const next = prev.map((t) => {
         if (t.id === ticketId) {
+          const histEntry: TicketHistoryEntry = {
+            id: `hist-res-${Date.now()}`,
+            created_at: nowIso,
+            action_type: 'status_change',
+            from_status: t.status,
+            to_status: 'em_atendimento',
+            author_name: t.assigned_technician_name || 'Técnico / Central',
+            author_role: 'Operação',
+            note: 'Atendimento retomado (pausa encerrada).'
+          };
           return {
             ...t,
             status: 'em_atendimento' as const,
-            updated_at: new Date().toISOString()
+            notes: histEntry.note,
+            history: [histEntry, ...(t.history || [])],
+            updated_at: nowIso
           };
         }
         return t;
-      })
-    );
+      });
+      saveStoredTickets(next);
+      return next;
+    });
 
     updateRemoteTicketStatus(
       ticketId,
@@ -1245,6 +1311,16 @@ export function useAppStore() {
       notes?: string;
     }
   ) => {
+    const targetTicket = tickets.find((t) => t.id === ticketId);
+    if (
+      params.status === 'concluido' &&
+      targetTicket &&
+      (targetTicket.status === 'aguardando_orcamento' || (targetTicket.quote && targetTicket.quote.status === 'pendente'))
+    ) {
+      alert('Atenção: Este chamado possui um orçamento pendente de aprovação! Aprove o orçamento antes de concluir a Ordem de Serviço.');
+      return;
+    }
+
     let resolvedTechName: string | undefined = undefined;
     if (params.technicianId !== undefined) {
       if (!params.technicianId) {
@@ -1560,7 +1636,12 @@ export function useAppStore() {
   /**
    * Adiciona nota ou parecer com histórico imediato na OS
    */
-  const addTicketNote = async (ticketId: string, noteText: string, authorName = 'Administrador HelpTech') => {
+  const addTicketNote = async (
+    ticketId: string,
+    noteText: string,
+    authorName = 'Administrador HelpTech',
+    authorRole = 'Controladoria / Campo'
+  ) => {
     if (!noteText.trim()) return;
     const cleanNote = noteText.trim();
 
@@ -1574,7 +1655,7 @@ export function useAppStore() {
             from_status: t.status,
             to_status: t.status,
             author_name: authorName,
-            author_role: 'Controladoria / Auditoria',
+            author_role: authorRole,
             note: cleanNote
           };
           return {

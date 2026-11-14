@@ -20,7 +20,7 @@ export const VALID_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
     'concluido',
     'cancelado'
   ],
-  aguardando_orcamento: ['aguardando_peca', 'em_atendimento', 'concluido', 'cancelado'],
+  aguardando_orcamento: ['em_atendimento', 'aguardando_peca', 'cancelado'],
   aguardando_peca: ['em_atendimento', 'visita_agendada', 'aguardando_orcamento', 'concluido', 'cancelado'],
   aguardando_terceiro: ['em_atendimento', 'visita_agendada', 'aguardando_orcamento', 'concluido', 'cancelado'],
   concluido: [], // Estado terminal imutável
