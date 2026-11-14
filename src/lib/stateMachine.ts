@@ -9,9 +9,9 @@ export type TicketStatus = Ticket['status'];
  */
 export const VALID_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
   aberto: ['despachado', 'cancelado'],
-  despachado: ['em_deslocamento', 'despachado', 'aberto', 'visita_agendada', 'cancelado'],
-  em_deslocamento: ['em_atendimento', 'visita_agendada', 'cancelado'],
-  visita_agendada: ['em_deslocamento', 'em_atendimento', 'cancelado'],
+  despachado: ['em_deslocamento', 'despachado', 'aberto', 'visita_agendada', 'em_atendimento', 'concluido', 'cancelado'],
+  em_deslocamento: ['em_atendimento', 'visita_agendada', 'concluido', 'cancelado'],
+  visita_agendada: ['em_deslocamento', 'em_atendimento', 'concluido', 'cancelado'],
   em_atendimento: [
     'aguardando_orcamento',
     'aguardando_peca',
@@ -20,9 +20,9 @@ export const VALID_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
     'concluido',
     'cancelado'
   ],
-  aguardando_orcamento: ['aguardando_peca', 'em_atendimento', 'cancelado'],
-  aguardando_peca: ['em_atendimento', 'visita_agendada', 'cancelado'],
-  aguardando_terceiro: ['em_atendimento', 'visita_agendada', 'cancelado'],
+  aguardando_orcamento: ['aguardando_peca', 'em_atendimento', 'concluido', 'cancelado'],
+  aguardando_peca: ['em_atendimento', 'visita_agendada', 'aguardando_orcamento', 'concluido', 'cancelado'],
+  aguardando_terceiro: ['em_atendimento', 'visita_agendada', 'aguardando_orcamento', 'concluido', 'cancelado'],
   concluido: [], // Estado terminal imutável
   cancelado: []  // Estado terminal imutável
 };

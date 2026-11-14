@@ -63,16 +63,37 @@ export const OfficialAuditReportModal: React.FC<OfficialAuditReportModalProps> =
         {/* Corpo do Documento Timbrado Oficial */}
         <div className="p-8 overflow-y-auto space-y-6 text-slate-800 font-sans print:p-0 print:m-0">
           {/* Cabeçalho Institucional */}
-          <div className="border-b-2 border-slate-900 pb-4 text-center space-y-1">
-            <div className="text-[10px] uppercase font-bold tracking-widest text-slate-500">
-              HelpTech Informática &bull; Sistema Proprietário de Gestão de TI
+          <div className="border-b-2 border-slate-900 pb-4 space-y-3">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
+              <img
+                src="/helptech-logo.png"
+                alt="Help Tech Info Logo"
+                className="h-24 w-auto object-contain rounded-lg shadow-xs border border-slate-200"
+              />
+              <div className="text-center sm:text-left space-y-0.5">
+                <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">
+                  HELP TECH INFO
+                </h2>
+                <p className="text-xs font-semibold text-slate-700">
+                  CNPJ: 44.761.507/0001-33 &bull; Inscrição Estadual: 08.106.375/001-11
+                </p>
+                <p className="text-xs font-semibold text-slate-700">
+                  Fone: (61) 99214-4732 / 99229-5814
+                </p>
+                <p className="text-xs text-slate-600">
+                  Endereço: Quadra 317 casa 28 Del Lago II &bull; Bairro: Itapoã &bull; Cidade: Brasília-DF
+                </p>
+              </div>
             </div>
-            <h2 className="text-base font-extrabold text-slate-900 uppercase">
-              Relatório Gerencial de Manutenção e Suporte em Tecnologia da Informação
-            </h2>
-            <p className="text-[11px] text-slate-600">
-              Contrato de Prestação de Serviços HelpTech Informática &bull; Emissão: {nowStr}
-            </p>
+
+            <div className="text-center pt-2 border-t border-slate-200">
+              <h3 className="text-sm font-extrabold text-slate-900 uppercase">
+                Relatório Gerencial de Manutenção e Suporte em Tecnologia da Informação
+              </h3>
+              <p className="text-[11px] text-slate-600">
+                HELP TECH INFO &bull; Emissão: {nowStr}
+              </p>
+            </div>
           </div>
 
           {/* Quadro Resumo Executivo */}
@@ -148,17 +169,23 @@ export const OfficialAuditReportModal: React.FC<OfficialAuditReportModalProps> =
             <div className="space-y-8">
               <div className="h-0.5 bg-slate-300 w-48 mx-auto" />
               <div>
-                <strong>Supervisão Técnica HelpTech Informática</strong>
-                <p className="text-[10px] text-slate-400">Responsável Operacional do Contrato</p>
+                <strong>HELP TECH INFO</strong>
+                <p className="text-[10px] text-slate-500">CNPJ: 44.761.507/0001-33 &bull; IE: 08.106.375/001-11</p>
+                <p className="text-[10px] text-slate-400">Responsável Técnico / Operacional</p>
               </div>
             </div>
             <div className="space-y-8">
               <div className="h-0.5 bg-slate-300 w-48 mx-auto" />
               <div>
-                <strong>Fiscal do Contrato &bull; HelpTech</strong>
-                <p className="text-[10px] text-slate-400">Diretoria de Tecnologia da Informação (DTI)</p>
+                <strong>Gestão / Fiscalização do Contrato</strong>
+                <p className="text-[10px] text-slate-500">Conferência e Homologação de Serviços</p>
+                <p className="text-[10px] text-slate-400">Unidade / Coordenação</p>
               </div>
             </div>
+          </div>
+
+          <div className="pt-3 border-t border-slate-200 text-center text-[10px] text-slate-500">
+            HELP TECH INFO &bull; CNPJ: 44.761.507/0001-33 &bull; IE: 08.106.375/001-11 &bull; Fone: (61) 99214-4732 / 99229-5814 &bull; Quadra 317 casa 28 Del Lago II, Itapoã, Brasília-DF
           </div>
         </div>
       </div>

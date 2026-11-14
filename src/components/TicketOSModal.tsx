@@ -42,24 +42,42 @@ export const TicketOSModal: React.FC<TicketOSModalProps> = ({ ticket, onClose, o
         {/* Conteúdo imprimível da OS */}
         <div id="printable-os" className="p-8 overflow-y-auto space-y-6 text-slate-800 bg-white">
           {/* Cabeçalho Oficial HelpTech */}
-          <div className="text-center pb-6 border-b-2 border-slate-900/20">
-            <div className="inline-block px-3 py-1 bg-blue-50 text-blue-900 rounded-full text-xs font-bold tracking-wider uppercase mb-2">
-              HelpTech Informática • Gestão de Atendimento & Suporte Técnico Especializado
+          <div className="pb-6 border-b-2 border-slate-900/20">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-5 mb-4">
+              <img
+                src="/helptech-logo.png"
+                alt="Help Tech Info Logo"
+                className="h-24 w-auto object-contain rounded-lg shadow-xs border border-slate-200"
+              />
+              <div className="text-center sm:text-left space-y-0.5">
+                <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">
+                  HELP TECH INFO
+                </h2>
+                <p className="text-xs font-semibold text-slate-700">
+                  CNPJ: 44.761.507/0001-33 &bull; Inscrição Estadual: 08.106.375/001-11
+                </p>
+                <p className="text-xs font-semibold text-slate-700">
+                  Fone: (61) 99214-4732 / 99229-5814
+                </p>
+                <p className="text-xs text-slate-600">
+                  Endereço: Quadra 317 casa 28 Del Lago II &bull; Bairro: Itapoã &bull; Cidade: Brasília-DF
+                </p>
+              </div>
             </div>
-            <h1 className="text-xl font-black text-slate-900 uppercase tracking-tight">
-              ORDEM DE SERVIÇO & TERMO DE CONFORMIDADE TÉCNICA
-            </h1>
-            <p className="text-xs text-slate-500 mt-1">
-              Plataforma Corporativa de Manutenção e Suporte Tecnológico de TI
-            </p>
-            <div className="mt-4 flex items-center justify-center gap-6 text-sm">
-              <span className="font-mono font-bold bg-slate-100 px-3 py-1 rounded border border-slate-300">
-                Protocolo: {ticket.protocol}
-              </span>
-              <span className="text-slate-600">
-                Emissão: {new Date(ticket.created_at).toLocaleDateString('pt-BR')} às{' '}
-                {new Date(ticket.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-              </span>
+
+            <div className="text-center pt-3 border-t border-slate-200">
+              <h1 className="text-lg font-black text-slate-900 uppercase tracking-tight">
+                ORDEM DE SERVIÇO & TERMO DE CONFORMIDADE TÉCNICA
+              </h1>
+              <div className="mt-2 flex items-center justify-center gap-6 text-xs">
+                <span className="font-mono font-bold bg-slate-100 px-3 py-1 rounded border border-slate-300">
+                  Protocolo: {ticket.protocol}
+                </span>
+                <span className="text-slate-600">
+                  Emissão: {new Date(ticket.created_at).toLocaleDateString('pt-BR')} às{' '}
+                  {new Date(ticket.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -305,14 +323,25 @@ export const TicketOSModal: React.FC<TicketOSModalProps> = ({ ticket, onClose, o
                 </div>
 
                 {/* Traçado da Assinatura SVG */}
-                <div className="bg-white p-3 rounded-lg border border-slate-300 w-56 flex flex-col items-center">
-                  <div className="w-full h-16 flex items-center justify-center">
-                    <svg viewBox="0 0 200 70" className="w-full h-full stroke-slate-900 fill-none stroke-[2]">
-                      <path d={ticket.completion.signature_svg} />
-                    </svg>
+                <div className="bg-white p-3 rounded-lg border border-slate-300 w-64 flex flex-col items-center">
+                  <div className="w-full h-20 flex items-center justify-center overflow-hidden">
+                    {ticket.completion.signature_svg?.trim().startsWith('<svg') ? (
+                      <div
+                        className="w-full h-full flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
+                        dangerouslySetInnerHTML={{ __html: ticket.completion.signature_svg }}
+                      />
+                    ) : (
+                      <svg viewBox="0 0 450 160" className="w-full h-full stroke-slate-900 fill-none stroke-[2.5]">
+                        <path
+                          d={ticket.completion.signature_svg}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    )}
                   </div>
                   <div className="w-full border-t border-slate-400 mt-1 pt-1 text-[10px] text-center text-slate-500">
-                    Assinatura Eletrônica em Tela
+                    Assinatura Eletrônica Homologada
                   </div>
                 </div>
               </div>
@@ -324,9 +353,9 @@ export const TicketOSModal: React.FC<TicketOSModalProps> = ({ ticket, onClose, o
           </div>
 
           {/* Rodapé de autenticidade */}
-          <div className="pt-4 text-center text-[10px] text-slate-400 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-2">
-            <span>Token de Autenticidade: <strong className="font-mono text-slate-600">{ticket.tracking_token}</strong></span>
-            <span>Sistema Integrado de Suporte e Governança • HelpTech Informática</span>
+          <div className="pt-4 text-center text-[10px] text-slate-500 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-2">
+            <span>Token de Autenticidade: <strong className="font-mono text-slate-700">{ticket.tracking_token}</strong></span>
+            <span>HELP TECH INFO &bull; CNPJ: 44.761.507/0001-33 &bull; Fone: (61) 99214-4732 / 99229-5814</span>
           </div>
         </div>
       </div>

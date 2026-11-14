@@ -8,10 +8,10 @@ interface SignaturePadProps {
 
 export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, disabled = false }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [hasStroke, setHasStroke] = useState(false);
-  const [paths, setPaths] = useState<string[]>([]);
+  const isDrawingRef = useRef(false);
+  const pathsRef = useRef<string[]>([]);
   const currentPathRef = useRef<string>('');
+  const [hasStroke, setHasStroke] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -20,7 +20,6 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, disabled = f
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Configuração do traçado
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -28,22 +27,25 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, disabled = f
   }, []);
 
   const getCoordinates = (
-    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement> | React.PointerEvent<HTMLCanvasElement>
   ): { x: number; y: number } | null => {
     const canvas = canvasRef.current;
     if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
+    const scaleX = rect.width > 0 ? canvas.width / rect.width : 1;
+    const scaleY = rect.height > 0 ? canvas.height / rect.height : 1;
 
     if ('touches' in e) {
-      if (e.touches.length === 0) return null;
+      const touch = e.touches[0] || e.changedTouches?.[0];
+      if (!touch) return null;
       return {
-        x: e.touches[0].clientX - rect.left,
-        y: e.touches[0].clientY - rect.top
+        x: (touch.clientX - rect.left) * scaleX,
+        y: (touch.clientY - rect.top) * scaleY
       };
     } else {
       return {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY
       };
     }
   };
@@ -59,17 +61,25 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, disabled = f
     const ctx = canvas?.getContext('2d');
     if (!ctx) return;
 
-    setIsDrawing(true);
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0f172a';
+
+    isDrawingRef.current = true;
     setHasStroke(true);
     ctx.beginPath();
     ctx.moveTo(coords.x, coords.y);
-    currentPathRef.current = `M ${Math.round(coords.x)} ${Math.round(coords.y)}`;
+    const x = Math.round(coords.x);
+    const y = Math.round(coords.y);
+    currentPathRef.current = `M ${x} ${y} L ${x + 1} ${y + 1}`;
+    onSave([...pathsRef.current, currentPathRef.current].join(' '));
   };
 
   const draw = (
     e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
   ) => {
-    if (!isDrawing || disabled) return;
+    if (!isDrawingRef.current || disabled) return;
     const coords = getCoordinates(e);
     if (!coords) return;
 
@@ -80,14 +90,16 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, disabled = f
     ctx.lineTo(coords.x, coords.y);
     ctx.stroke();
     currentPathRef.current += ` L ${Math.round(coords.x)} ${Math.round(coords.y)}`;
+    onSave([...pathsRef.current, currentPathRef.current].join(' '));
   };
 
   const stopDrawing = () => {
-    if (!isDrawing) return;
-    setIsDrawing(false);
+    if (!isDrawingRef.current) return;
+    isDrawingRef.current = false;
     if (currentPathRef.current) {
-      const updated = [...paths, currentPathRef.current];
-      setPaths(updated);
+      const updated = [...pathsRef.current, currentPathRef.current];
+      pathsRef.current = updated;
+      currentPathRef.current = '';
       onSave(updated.join(' '));
     }
   };
@@ -99,8 +111,9 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, disabled = f
     if (!ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    isDrawingRef.current = false;
     setHasStroke(false);
-    setPaths([]);
+    pathsRef.current = [];
     currentPathRef.current = '';
     onSave('');
   };
@@ -110,7 +123,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, disabled = f
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
           <PenTool size={14} className="text-blue-600" />
-          <span>Assinatura Digital do Responsável Escolar</span>
+          <span>Assinatura Digital do Responsável / Cliente *</span>
         </div>
         <button
           type="button"
@@ -128,7 +141,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, disabled = f
           ref={canvasRef}
           width={450}
           height={160}
-          className="w-full h-40 cursor-crosshair bg-white"
+          className="w-full h-40 cursor-crosshair bg-white touch-none"
           onMouseDown={startDrawing}
           onMouseMove={draw}
           onMouseUp={stopDrawing}
@@ -139,7 +152,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, disabled = f
         />
         {!hasStroke && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center text-slate-400 text-xs">
-            Assine com o dedo ou caneta touch dentro desta área
+            Assine com o dedo, mouse ou caneta touch dentro desta área
           </div>
         )}
       </div>
@@ -147,8 +160,8 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, disabled = f
       <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500">
         <span>Vetor SVG criptografado no comprovante</span>
         {hasStroke && (
-          <span className="text-emerald-600 font-medium flex items-center gap-0.5">
-            <Check size={12} /> Traço capturado
+          <span className="text-emerald-600 font-bold flex items-center gap-0.5">
+            <Check size={12} /> Assinatura pronta para salvar
           </span>
         )}
       </div>

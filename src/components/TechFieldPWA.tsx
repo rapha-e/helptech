@@ -60,7 +60,7 @@ interface TechFieldPWAProps {
     lng: number
   ) => { success: boolean; distanceKm: number; message: string };
   onSubmitQuote: (ticketId: string, techId: string, data: QuoteSubmissionData) => void;
-  onCompleteTicket: (ticketId: string, techId: string, data: TicketCompletionData) => void;
+  onCompleteTicket: (ticketId: string, techId: string, data: TicketCompletionData) => boolean | void;
   onScheduleVisit?: (ticketId: string, scheduledAt: string, notes: string) => void;
   onSetWaitingParts?: (ticketId: string, partNotes: string) => void;
   onSetWaitingThirdParty?: (ticketId: string, thirdPartyNotes: string) => void;
@@ -282,26 +282,40 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
   };
 
   const handleFinalizeService = (ticketId: string) => {
-    if (
-      !currentTech ||
-      !serviceSummary.trim() ||
-      !schoolRepName.trim() ||
-      !schoolRepDoc.trim() ||
-      !signatureSvg
-    ) {
-      alert('Preencha o resumo, os dados do gestor e colete a assinatura na tela.');
+    if (!currentTech) {
+      alert('Selecione o técnico responsável.');
+      return;
+    }
+    if (!serviceSummary.trim() || serviceSummary.trim().length < 3) {
+      alert('Preencha o resumo do serviço executado (mínimo 3 caracteres).');
+      return;
+    }
+    if (!schoolRepName.trim() || schoolRepName.trim().length < 2) {
+      alert('Preencha o nome do responsável / cliente que conferiu o serviço.');
+      return;
+    }
+    if (!schoolRepDoc.trim() || schoolRepDoc.trim().length < 2) {
+      alert('Informe a matrícula, RG ou CPF do responsável.');
+      return;
+    }
+    if (!signatureSvg || signatureSvg.trim().length < 5) {
+      alert('Por favor, colete a assinatura digital na tela antes de concluir.');
       return;
     }
 
     // Feedback háptico comemorativo na conclusão formal da OS
     triggerHapticFeedback([100, 50, 100, 50, 200]);
 
-    onCompleteTicket(ticketId, currentTech.id, {
-      service_summary: serviceSummary,
-      school_representative_name: schoolRepName,
-      school_representative_doc: schoolRepDoc,
+    const ok = onCompleteTicket(ticketId, currentTech.id, {
+      service_summary: serviceSummary.trim(),
+      school_representative_name: schoolRepName.trim(),
+      school_representative_doc: schoolRepDoc.trim(),
       signature_svg: signatureSvg
     });
+
+    if (ok === false) {
+      return;
+    }
 
     setCompletionTicketId(null);
     setServiceSummary('');
@@ -679,16 +693,19 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
               <span>Ver Andamento & Linha do Tempo</span>
             </button>
 
-            {/* SE O CHAMADO FOI CANCELADO (ORÇAMENTO REPROVADO), EXIBE O PARECER */}
+            {/* SE O CHAMADO FOI CANCELADO, EXIBE O PARECER REAL */}
             {ticket.status === 'cancelado' && (
               <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-900 space-y-1">
                 <div className="font-bold flex items-center gap-1.5 text-rose-800">
-                  <XCircle size={15} /> Chamado Encerrado / Orçamento Reprovado
+                  <XCircle size={15} />{' '}
+                  {ticket.quote?.status === 'rejeitado'
+                    ? 'Chamado Encerrado / Orçamento Reprovado'
+                    : 'Ordem de Serviço Cancelada'}
                 </div>
                 <p className="text-[11px] text-rose-700">
                   {ticket.quote?.decision_reason
                     ? `Motivo: "${ticket.quote.decision_reason}" (por ${ticket.quote.decision_by_name || 'Gestão da CRE/Escola'})`
-                    : 'O orçamento não foi autorizado pela gestão. Equipamento liberado sem custos.'}
+                    : ticket.notes || 'Ordem de serviço cancelada pela Central de Atendimento.'}
                 </p>
               </div>
             )}
@@ -812,13 +829,24 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
               )}
 
               {ticket.status === 'aguardando_orcamento' && (
-                <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 space-y-1">
+                <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 space-y-2">
                   <div className="font-bold flex items-center gap-1">
                     <Clock size={13} /> Orçamento em Análise pelo Gestor
                   </div>
                   <p className="text-[11px]">
                     Total orçado: {formatCurrencyBRL(ticket.quote?.total_amount || 0)}. Aguardando aprovação digital da escola.
                   </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCompletionTicketId(ticket.id);
+                      setQuoteTicketId(null);
+                      setSchoolRepName(ticket.requester_name);
+                    }}
+                    className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-xs"
+                  >
+                    <CheckCircle2 size={14} /> Concluir com Assinatura
+                  </button>
                 </div>
               )}
 
@@ -1026,6 +1054,28 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
                       </div>
                     </div>
                   ))}
+
+                  {/* TOTAL GERAL DO ORÇAMENTO EM REAL TIME */}
+                  <div className="bg-amber-100/90 border border-amber-300 rounded-xl p-3 flex items-center justify-between shadow-2xs">
+                    <div>
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-900 block">
+                        Total do Orçamento
+                      </span>
+                      <span className="text-[10px] text-amber-700 font-semibold">
+                        {quoteItems.length} {quoteItems.length === 1 ? 'item lançado' : 'itens lançados'} • Cálculo em tempo real
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-base font-black text-amber-950 font-mono">
+                        {formatCurrencyBRL(
+                          quoteItems.reduce(
+                            (acc, it) => acc + (Number(it.quantity) || 1) * (Number(it.unit_price) || 0),
+                            0
+                          )
+                        )}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
                 <button

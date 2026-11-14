@@ -34,7 +34,7 @@ export const quoteItemSchema = z.object({
 export const quoteSubmissionSchema = z.object({
   technical_diagnosis: z
     .string()
-    .min(15, 'O laudo e diagnóstico técnico preliminar deve conter ao menos 15 caracteres'),
+    .min(3, 'O laudo e diagnóstico técnico preliminar deve conter ao menos 3 caracteres'),
   items: z.array(quoteItemSchema).min(1, 'Insira ao menos um item ou serviço no orçamento')
 });
 
@@ -43,16 +43,16 @@ export type QuoteSubmissionData = z.infer<typeof quoteSubmissionSchema>;
 export const ticketCompletionSchema = z.object({
   service_summary: z
     .string()
-    .min(15, 'Descreva o serviço técnico efetivamente executado'),
+    .min(3, 'Descreva o serviço técnico efetivamente executado'),
   school_representative_name: z
     .string()
-    .min(3, 'Nome completo do gestor escolar que conferiu o serviço'),
+    .min(2, 'Nome completo do gestor escolar que conferiu o serviço'),
   school_representative_doc: z
     .string()
-    .min(5, 'Informe a Matrícula HelpTech ou CPF do responsável escolar'),
+    .min(2, 'Informe a Matrícula HelpTech ou CPF do responsável escolar'),
   signature_svg: z
     .string()
-    .min(10, 'A assinatura digital na tela é obrigatória para encerramento da OS')
+    .min(5, 'A assinatura digital na tela é obrigatória para encerramento da OS')
 });
 
 export type TicketCompletionData = z.infer<typeof ticketCompletionSchema>;

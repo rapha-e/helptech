@@ -30,7 +30,9 @@ import {
   fetchRemoteTickets,
   createRemoteTicket,
   updateRemoteTicketStatus,
-  adminUpdateTicketRemote
+  adminUpdateTicketRemote,
+  completeTicketRemote,
+  submitQuoteRemote
 } from './ticketService';
 import {
   fetchRemoteSchools,
@@ -181,12 +183,26 @@ export function useAppStore() {
               ...remoteHist.filter((rh) => !localHist.some((lh) => lh.id === rh.id))
             ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+            const remoteTime = new Date(remoteT.updated_at || 0).getTime();
+            const localTime = new Date(localT.updated_at || 0).getTime();
+            const isLocalNewer = localTime > remoteTime;
+
+            // Se o chamado remoto não está cancelado mas o cache local antigo estava cancelado sem justificativa de orçamento, prioriza o remoto
+            const resolvedStatus =
+              localT.status === 'cancelado' && remoteT.status !== 'cancelado' && !localT.quote?.decision_reason
+                ? remoteT.status
+                : isLocalNewer
+                ? localT.status
+                : remoteT.status;
+
             return {
               ...remoteT,
-              ...localT,
-              status: localT.status || remoteT.status,
+              ...(isLocalNewer ? localT : {}),
+              status: resolvedStatus,
               assigned_technician_id: localT.assigned_technician_id ?? remoteT.assigned_technician_id,
               assigned_technician_name: localT.assigned_technician_name ?? remoteT.assigned_technician_name,
+              quote: localT.quote || remoteT.quote,
+              completion: localT.completion || remoteT.completion,
               notes: localT.notes || remoteT.notes,
               history: combinedHist
             };
@@ -854,6 +870,7 @@ export function useAppStore() {
     const transitionVal = validateStateTransition(target.status, 'aguardando_orcamento', { quoteData: data });
     if (!transitionVal.valid) {
       console.warn('Orçamento rejeitado pela máquina de estados:', transitionVal.error);
+      alert(transitionVal.error || 'Dados do orçamento inválidos.');
       return;
     }
 
@@ -871,14 +888,28 @@ export function useAppStore() {
     }));
 
     const totalAmount = items.reduce((acc, curr) => acc + curr.subtotal, 0);
+    const nowIso = new Date().toISOString();
 
-    setTickets((prev) =>
-      prev.map((t) => {
+    const historyEntry: TicketHistoryEntry = {
+      id: `hist-qt-${Date.now()}`,
+      created_at: nowIso,
+      action_type: 'status_change',
+      from_status: target.status,
+      to_status: 'aguardando_orcamento',
+      author_name: tech?.name || 'Técnico de Campo',
+      author_role: 'Técnico Credenciado',
+      note: `Orçamento enviado (${totalAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}): ${data.technical_diagnosis}`
+    };
+
+    setTickets((prev) => {
+      const next = prev.map((t) => {
         if (t.id === ticketId) {
           return {
             ...t,
-            status: 'aguardando_orcamento',
-            updated_at: new Date().toISOString(),
+            status: 'aguardando_orcamento' as const,
+            updated_at: nowIso,
+            notes: historyEntry.note,
+            history: [historyEntry, ...(t.history || [])],
             quote: {
               id: quoteId,
               ticket_id: ticketId,
@@ -886,23 +917,19 @@ export function useAppStore() {
               technician_name: tech?.name || 'Técnico Credenciado',
               total_amount: Math.round(totalAmount * 100) / 100,
               technical_diagnosis: data.technical_diagnosis,
-              status: 'pendente',
-              created_at: new Date().toISOString(),
+              status: 'pendente' as const,
+              created_at: nowIso,
               items
             }
           };
         }
         return t;
-      })
-    );
+      });
+      saveStoredTickets(next);
+      return next;
+    });
 
-    updateRemoteTicketStatus(
-      ticketId,
-      'aguardando_orcamento',
-      {},
-      { name: tech?.name || 'Técnico', role: 'ROLE_TECH' },
-      'em_atendimento'
-    );
+    submitQuoteRemote(ticketId, technicianId, data.technical_diagnosis, items);
   };
 
   /**
@@ -927,25 +954,43 @@ export function useAppStore() {
       return;
     }
 
-    setTickets((prev) =>
-      prev.map((t) => {
+    const nowIso = new Date().toISOString();
+    const historyEntry: TicketHistoryEntry = {
+      id: `hist-dec-${Date.now()}`,
+      created_at: nowIso,
+      action_type: 'status_change',
+      from_status: target.status,
+      to_status: nextStatus,
+      author_name: decisionByName,
+      author_role: 'Gestão / Controladoria',
+      note: approved
+        ? 'Orçamento aprovado pela gestão.'
+        : `Orçamento reprovado: ${reason || 'Sem justificativa adicional.'}`
+    };
+
+    setTickets((prev) => {
+      const next = prev.map((t) => {
         if (t.id === ticketId && t.quote) {
           return {
             ...t,
-            status: nextStatus,
-            updated_at: new Date().toISOString(),
+            status: nextStatus as Ticket['status'],
+            updated_at: nowIso,
+            notes: historyEntry.note,
+            history: [historyEntry, ...(t.history || [])],
             quote: {
               ...t.quote,
-              status: approved ? 'aprovado' : 'rejeitado',
+              status: (approved ? 'aprovado' : 'rejeitado') as 'aprovado' | 'rejeitado',
               decision_by_name: decisionByName,
               decision_reason: reason,
-              decided_at: new Date().toISOString()
+              decided_at: nowIso
             }
           };
         }
         return t;
-      })
-    );
+      });
+      saveStoredTickets(next);
+      return next;
+    });
 
     updateRemoteTicketStatus(
       ticketId,
@@ -963,51 +1008,70 @@ export function useAppStore() {
     ticketId: string,
     technicianId: string,
     data: TicketCompletionData
-  ) => {
+  ): boolean => {
     const target = tickets.find((t) => t.id === ticketId);
-    if (!target) return;
+    if (!target) return false;
 
     const transitionVal = validateStateTransition(target.status, 'concluido', { completionData: data });
     if (!transitionVal.valid) {
       console.warn('Conclusão rejeitada pela máquina de estados:', transitionVal.error);
-      return;
+      alert(transitionVal.error || 'Não foi possível validar os dados de conclusão da OS.');
+      return false;
     }
 
     const tech = technicians.find((t) => t.id === technicianId);
     const completionId = `cmp-${Date.now()}`;
+    const nowIso = new Date().toISOString();
 
-    setTickets((prev) =>
-      prev.map((t) => {
+    const historyEntry: TicketHistoryEntry = {
+      id: `hist-cmp-${Date.now()}`,
+      created_at: nowIso,
+      action_type: 'status_change',
+      from_status: target.status,
+      to_status: 'concluido',
+      author_name: tech?.name || target.assigned_technician_name || 'Técnico Responsável',
+      author_role: 'Técnico Credenciado',
+      note: `OS concluída e assinada por ${data.school_representative_name} (${data.school_representative_doc}). Resumo: ${data.service_summary}`
+    };
+
+    setTickets((prev) => {
+      const next = prev.map((t) => {
         if (t.id === ticketId) {
           return {
             ...t,
-            status: 'concluido',
-            resolved_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            status: 'concluido' as const,
+            resolved_at: nowIso,
+            updated_at: nowIso,
+            notes: historyEntry.note,
+            history: [historyEntry, ...(t.history || [])],
             completion: {
               id: completionId,
               ticket_id: ticketId,
               technician_id: technicianId,
-              technician_name: tech?.name || 'Técnico Responsável',
+              technician_name: tech?.name || t.assigned_technician_name || 'Técnico Responsável',
               service_summary: data.service_summary,
               school_representative_name: data.school_representative_name,
               school_representative_doc: data.school_representative_doc,
               signature_svg: data.signature_svg,
-              completed_at: new Date().toISOString()
+              completed_at: nowIso
             }
           };
         }
         return t;
-      })
+      });
+      saveStoredTickets(next);
+      return next;
+    });
+
+    completeTicketRemote(
+      ticketId,
+      data.service_summary,
+      data.school_representative_name,
+      data.school_representative_doc,
+      data.signature_svg
     );
 
-    updateRemoteTicketStatus(
-      ticketId,
-      'concluido',
-      { resolved_at: new Date().toISOString() },
-      { name: tech?.name || 'Técnico', role: 'ROLE_TECH' },
-      'em_atendimento'
-    );
+    return true;
   };
 
   /**

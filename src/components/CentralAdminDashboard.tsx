@@ -477,7 +477,14 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   const slaReport = calculateSlaReport(tickets, regions, technicians);
 
   const downloadOperationalCsv = () => {
-    const csvContent = exportOperationalReportCsv(tickets);
+    const companyHeader = [
+      '"HELP TECH INFO"',
+      '"CNPJ: 44.761.507/0001-33 | Inscrição Estadual: 08.106.375/001-11"',
+      '"Fone: (61) 99214-4732 / 99229-5814"',
+      '"Endereço: Quadra 317 casa 28 Del Lago II - Bairro: Itapoã - Cidade: Brasília-DF"',
+      '""'
+    ].join('\n');
+    const csvContent = `${companyHeader}\n${exportOperationalReportCsv(tickets)}`;
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -874,7 +881,9 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                         };
                         const prevStage = currentIdx > 0 ? KANBAN_STAGES_FLOW[currentIdx - 1] : null;
                         const nextStage =
-                          currentIdx >= 0 && currentIdx < KANBAN_STAGES_FLOW.length - 1
+                          currentIdx >= 0 &&
+                          currentIdx < KANBAN_STAGES_FLOW.length - 1 &&
+                          KANBAN_STAGES_FLOW[currentIdx + 1].status !== 'cancelado'
                             ? KANBAN_STAGES_FLOW[currentIdx + 1]
                             : null;
 

@@ -49,6 +49,7 @@ export function mapSupabaseRowToTicket(
     sla_resolution_hours: 48
   };
 
+  const rawQuoteItems = row.ticket_quotes?.[0]?.ticket_quote_items || row.ticket_quotes?.[0]?.parts_list || [];
   const quote = row.ticket_quotes?.[0]
     ? {
         id: row.ticket_quotes[0].id,
@@ -56,20 +57,20 @@ export function mapSupabaseRowToTicket(
         technician_id: row.ticket_quotes[0].technician_id,
         technician_name: row.technicians?.name || 'Técnico Responsável',
         total_amount: Number(row.ticket_quotes[0].total_amount) || 0,
-        technical_diagnosis: row.ticket_quotes[0].technical_diagnosis || '',
+        technical_diagnosis: row.ticket_quotes[0].technical_diagnosis || row.ticket_quotes[0].justification || '',
         status: row.ticket_quotes[0].status,
         decision_by_name: row.ticket_quotes[0].decision_by_name || undefined,
         decision_reason: row.ticket_quotes[0].decision_reason || undefined,
         decided_at: row.ticket_quotes[0].decided_at || undefined,
         created_at: row.ticket_quotes[0].created_at,
-        items: (row.ticket_quotes[0].ticket_quote_items || []).map((item: any) => ({
-          id: item.id,
-          quote_id: item.quote_id,
-          item_type: item.item_type,
-          item_name: item.item_name,
-          quantity: item.quantity,
+        items: (Array.isArray(rawQuoteItems) ? rawQuoteItems : []).map((item: any, idx: number) => ({
+          id: item.id || `qi-${idx}`,
+          quote_id: item.quote_id || row.ticket_quotes[0].id,
+          item_type: item.item_type || 'peca',
+          item_name: item.item_name || item.name || 'Item',
+          quantity: Number(item.quantity) || 1,
           unit_price: Number(item.unit_price) || 0,
-          subtotal: Number(item.subtotal) || 0
+          subtotal: Number(item.subtotal) || (Number(item.quantity) || 1) * (Number(item.unit_price) || 0)
         }))
       }
     : undefined;
@@ -85,6 +86,19 @@ export function mapSupabaseRowToTicket(
         school_representative_doc: row.ticket_completions[0].school_representative_doc,
         signature_svg: row.ticket_completions[0].signature_svg,
         completed_at: row.ticket_completions[0].completed_at
+      }
+    : row.school_signature_svg || row.technical_report
+    ? {
+        id: `cmp-${row.id}`,
+        ticket_id: row.id,
+        technician_id: row.assigned_technician_id || '',
+        technician_name: row.technicians?.name || 'Técnico Responsável',
+        service_summary: row.technical_report || 'Atendimento técnico concluído.',
+        school_representative_name:
+          row.school_representative_name || row.closure_notes || row.requester_name || 'Gestor Escolar',
+        school_representative_doc: row.school_representative_doc || 'Homologado',
+        signature_svg: row.school_signature_svg || '',
+        completed_at: row.resolved_at || row.updated_at || row.created_at
       }
     : undefined;
 
@@ -144,13 +158,13 @@ export function mapSupabaseRowToTicket(
     assigned_technician_name: row.technicians?.name || undefined,
     dispatch_attempts: row.dispatch_attempts || 0,
     dispatch_timeout_at: row.dispatch_timeout_at || undefined,
-    scheduled_visit_at: row.scheduled_visit_at || undefined,
+    scheduled_visit_at: row.scheduled_visit_at || row.scheduled_visit_date || undefined,
     scheduled_visit_notes: row.scheduled_visit_notes || undefined,
     pending_part_notes: row.pending_part_notes || undefined,
     third_party_notes: row.third_party_notes || undefined,
     arrival_lat: row.arrival_lat ? Number(row.arrival_lat) : undefined,
     arrival_lng: row.arrival_lng ? Number(row.arrival_lng) : undefined,
-    arrived_at: row.arrived_at || undefined,
+    arrived_at: row.arrived_at || row.arrival_time || undefined,
     resolved_at: row.resolved_at || undefined,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -182,11 +196,8 @@ export async function fetchRemoteTickets(
         schools(name, address, regional_coordinations(name)),
         ticket_categories(name),
         technicians(name),
-        ticket_attachments(*),
-        ticket_dispatch_logs(*),
         ticket_audit_events(*),
-        ticket_quotes(*, ticket_quote_items(*)),
-        ticket_completions(*)
+        ticket_quotes(*)
       `)
       .order('created_at', { ascending: false });
 
@@ -503,23 +514,95 @@ export async function checkInRemote(ticketId: string, lat?: number, lng?: number
 }
 
 /**
- * Executa conclusão da OS com laudo e assinatura digital via RPC no PostgreSQL
+ * Executa conclusão da OS com laudo e assinatura digital via RPC no PostgreSQL (com fallback direto)
  */
 export async function completeTicketRemote(
   ticketId: string,
   report: string,
-  notes: string,
+  representativeName: string,
   doc: string,
   signature: string
 ) {
   if (!isSupabaseConfigured || !supabase) return null;
-  return await supabase.rpc('complete_ticket', {
-    p_ticket_id: ticketId,
-    p_technical_report: report,
-    p_closure_notes: notes,
-    p_school_representative_doc: doc,
-    p_school_signature_svg: signature
-  });
+  try {
+    const { data, error } = await supabase.rpc('complete_ticket', {
+      p_ticket_id: ticketId,
+      p_technical_report: report,
+      p_closure_notes: representativeName,
+      p_school_representative_doc: doc,
+      p_school_signature_svg: signature
+    });
+    if (!error) return { data, error: null };
+
+    // Fallback direto na tabela tickets
+    return await supabase
+      .from('tickets')
+      .update({
+        status: 'concluido',
+        technical_report: report,
+        closure_notes: representativeName,
+        school_representative_name: representativeName,
+        school_representative_doc: doc,
+        school_signature_svg: signature,
+        resolved_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', ticketId);
+  } catch (err) {
+    console.warn('Erro em completeTicketRemote:', err);
+    return null;
+  }
+}
+
+/**
+ * Grava orçamento remoto no Supabase
+ */
+export async function submitQuoteRemote(
+  ticketId: string,
+  technicianId: string,
+  technicalDiagnosis: string,
+  items: { item_type: string; item_name: string; quantity: number; unit_price: number; subtotal: number }[]
+) {
+  if (!isSupabaseConfigured || !supabase) return null;
+  try {
+    const partsCost = items
+      .filter((i) => i.item_type === 'peca')
+      .reduce((acc, i) => acc + i.subtotal, 0);
+    const laborCost = items
+      .filter((i) => i.item_type === 'servico')
+      .reduce((acc, i) => acc + i.subtotal, 0);
+    const totalAmount = partsCost + laborCost;
+
+    const { data, error } = await supabase.rpc('submit_quote', {
+      p_ticket_id: ticketId,
+      p_technician_id: technicianId,
+      p_parts_cost: partsCost,
+      p_labor_cost: laborCost,
+      p_justification: technicalDiagnosis,
+      p_parts_list: items
+    });
+    if (!error) return { data, error: null };
+
+    // Fallback direto
+    await supabase.from('ticket_quotes').insert({
+      ticket_id: ticketId,
+      technician_id: technicianId,
+      status: 'pendente',
+      total_amount: totalAmount,
+      parts_cost: partsCost,
+      labor_cost: laborCost,
+      justification: technicalDiagnosis,
+      technical_diagnosis: technicalDiagnosis,
+      parts_list: items
+    });
+    return await supabase
+      .from('tickets')
+      .update({ status: 'aguardando_orcamento', updated_at: new Date().toISOString() })
+      .eq('id', ticketId);
+  } catch (err) {
+    console.warn('Erro em submitQuoteRemote:', err);
+    return null;
+  }
 }
 
 /**
