@@ -33,7 +33,10 @@ import {
   adminUpdateTicketRemote,
   completeTicketRemote,
   submitQuoteRemote,
-  decideQuoteRemote
+  decideQuoteRemote,
+  acceptDispatchRemote,
+  refuseDispatchRemote,
+  checkInRemote
 } from './ticketService';
 import {
   fetchRemoteSchools,
@@ -206,15 +209,67 @@ export function useAppStore() {
                 ? localT.quote || remoteT.quote
                 : remoteT.quote || localT.quote;
 
+            // Se o cache local estiver mais avançado que o banco remoto (ex.: técnico avançou etapas no PWA), sincroniza automaticamente para o servidor
+            if (
+              isLocalNewer &&
+              (localT.status !== remoteT.status ||
+                Boolean(localT.quote) !== Boolean(remoteT.quote) ||
+                localT.quote?.status !== remoteT.quote?.status)
+            ) {
+              (async () => {
+                try {
+                  if (localT.arrived_at && !remoteT.arrived_at) {
+                    await checkInRemote(localT.id, localT.arrival_lat, localT.arrival_lng);
+                  }
+                  if (localT.quote && (!remoteT.quote || localT.quote.total_amount !== remoteT.quote.total_amount)) {
+                    await submitQuoteRemote(
+                      localT.id,
+                      localT.quote.technician_id || localT.assigned_technician_id || '',
+                      localT.quote.technical_diagnosis,
+                      localT.quote.items
+                    );
+                  }
+                  if (localT.quote && localT.quote.status !== 'pendente' && remoteT.quote?.status !== localT.quote.status) {
+                    await decideQuoteRemote(
+                      localT.id,
+                      localT.quote.status === 'aprovado',
+                      localT.quote.decision_by_name || 'Cliente / Gestão',
+                      localT.quote.decision_reason
+                    );
+                  }
+                  if (localT.status !== remoteT.status) {
+                    await updateRemoteTicketStatus(
+                      localT.id,
+                      localT.status,
+                      {
+                        assigned_technician_id: localT.assigned_technician_id,
+                        arrived_at: localT.arrived_at,
+                        scheduled_visit_at: localT.scheduled_visit_at
+                      },
+                      { name: localT.assigned_technician_name || 'Sincronização Automática', role: 'ROLE_TECH' },
+                      remoteT.status
+                    );
+                  }
+                } catch (syncErr) {
+                  console.warn('Falha ao ressincronizar avanço local para o servidor:', syncErr);
+                }
+              })();
+            }
+
             return {
               ...remoteT,
               ...(isLocalNewer ? localT : {}),
               status: resolvedStatus,
-              assigned_technician_id: localT.assigned_technician_id ?? remoteT.assigned_technician_id,
-              assigned_technician_name: localT.assigned_technician_name ?? remoteT.assigned_technician_name,
+              assigned_technician_id: isLocalNewer
+                ? localT.assigned_technician_id ?? remoteT.assigned_technician_id
+                : remoteT.assigned_technician_id ?? localT.assigned_technician_id,
+              assigned_technician_name: isLocalNewer
+                ? localT.assigned_technician_name ?? remoteT.assigned_technician_name
+                : remoteT.assigned_technician_name ?? localT.assigned_technician_name,
+              arrived_at: remoteT.arrived_at || localT.arrived_at,
               quote: resolvedQuote,
-              completion: localT.completion || remoteT.completion,
-              notes: localT.notes || remoteT.notes,
+              completion: remoteT.completion || localT.completion,
+              notes: isLocalNewer ? localT.notes || remoteT.notes : remoteT.notes || localT.notes,
               history: combinedHist
             };
           });
@@ -259,6 +314,39 @@ export function useAppStore() {
 
   useEffect(() => {
     refreshData();
+
+    // Sincronização instantânea entre abas/janelas do mesmo navegador (ex: Técnico e Controladoria abertos juntos)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === TICKETS_STORAGE_KEY && e.newValue) {
+        try {
+          const parsed: Ticket[] = JSON.parse(e.newValue);
+          setTickets(parsed);
+        } catch {
+          // ignora erro de parse
+        }
+      }
+    };
+
+    const handleWindowFocus = () => {
+      setTickets((curr) => {
+        const stored = getStoredTickets();
+        return stored.length > 0 ? stored : curr;
+      });
+      refreshData();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('focus', handleWindowFocus);
+
+    const pollInterval = setInterval(() => {
+      refreshData();
+    }, 6000);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('focus', handleWindowFocus);
+      clearInterval(pollInterval);
+    };
   }, [refreshData]);
 
   // Sincronização granular em tempo real (WS4 / F-08: Realtime incremental em memória)
@@ -374,11 +462,12 @@ export function useAppStore() {
                         technician_name: tech?.name || 'Técnico Responsável',
                         total_amount: Number(newQuote.total_amount) || 0,
                         technical_diagnosis: newQuote.justification || newQuote.technical_diagnosis || '',
-                        status: newQuote.status,
+                        status: (newQuote.status === 'reprovado' ? 'rejeitado' : newQuote.status) as 'pendente' | 'aprovado' | 'rejeitado',
                         created_at: newQuote.created_at,
                         items: (newQuote.parts_list || []).map((p: any, idx: number) => ({
                           id: p.id || `quote-item-${idx}`,
                           quote_id: newQuote.id,
+                          item_type: (p.item_type || 'peca') as 'peca' | 'servico',
                           item_name: p.item_name || p.name || 'Peça / Serviço',
                           quantity: Number(p.quantity) || 1,
                           unit_price: Number(p.unit_price) || 0,
@@ -730,13 +819,15 @@ export function useAppStore() {
       return next;
     });
 
-    updateRemoteTicketStatus(
-      ticketId,
-      'em_deslocamento',
-      { dispatch_timeout_at: undefined },
-      { name: tech?.name || 'Técnico de Campo', role: 'ROLE_TECH' },
-      'despachado'
-    );
+    acceptDispatchRemote(ticketId).then(() => {
+      updateRemoteTicketStatus(
+        ticketId,
+        'em_deslocamento',
+        { dispatch_timeout_at: undefined },
+        { name: tech?.name || 'Técnico de Campo', role: 'ROLE_TECH' },
+        'despachado'
+      );
+    });
   };
 
   /**
@@ -834,17 +925,19 @@ export function useAppStore() {
       return next;
     });
 
-    updateRemoteTicketStatus(
-      ticketId,
-      nextStatus,
-      {
-        assigned_technician_id: nextCandidate?.technician.id || undefined,
-        dispatch_attempts: (target?.dispatch_attempts || 0) + 1,
-        dispatch_timeout_at: nextCandidate ? new Date(Date.now() + 20 * 60 * 1000).toISOString() : undefined
-      },
-      { name: tech?.name || 'Técnico', role: 'ROLE_TECH' },
-      'despachado'
-    );
+    refuseDispatchRemote(ticketId, reason).then(() => {
+      updateRemoteTicketStatus(
+        ticketId,
+        nextStatus,
+        {
+          assigned_technician_id: nextCandidate?.technician.id || undefined,
+          dispatch_attempts: (target?.dispatch_attempts || 0) + 1,
+          dispatch_timeout_at: nextCandidate ? new Date(Date.now() + 20 * 60 * 1000).toISOString() : undefined
+        },
+        { name: tech?.name || 'Técnico', role: 'ROLE_TECH' },
+        'despachado'
+      );
+    });
   };
 
   /**
@@ -914,17 +1007,19 @@ export function useAppStore() {
       return next;
     });
 
-    updateRemoteTicketStatus(
-      ticketId,
-      'em_atendimento',
-      {
-        arrival_lat: currentLat,
-        arrival_lng: currentLng,
-        arrived_at: new Date().toISOString()
-      },
-      { name: tech?.name || ticket.assigned_technician_name || 'Técnico', role: 'ROLE_TECH' },
-      ticket.status
-    );
+    checkInRemote(ticketId, currentLat, currentLng).then(() => {
+      updateRemoteTicketStatus(
+        ticketId,
+        'em_atendimento',
+        {
+          arrival_lat: currentLat,
+          arrival_lng: currentLng,
+          arrived_at: nowIso
+        },
+        { name: tech?.name || ticket.assigned_technician_name || 'Técnico', role: 'ROLE_TECH' },
+        ticket.status
+      );
+    });
 
     return {
       success: true,

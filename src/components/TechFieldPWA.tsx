@@ -117,6 +117,18 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
 }) => {
   const [selectedTechId, setSelectedTechId] = useState<string>(() => {
     try {
+      const params = new URLSearchParams(window.location.search);
+      const urlTechId = params.get('techId');
+      if (urlTechId && technicians.some((t) => t.id === urlTechId)) {
+        return urlTechId;
+      }
+      const urlTicketId = params.get('ticketId');
+      if (urlTicketId) {
+        const matchedTkt = tickets.find((t) => t.id === urlTicketId);
+        if (matchedTkt?.assigned_technician_id) {
+          return matchedTkt.assigned_technician_id;
+        }
+      }
       const rawProfile = localStorage.getItem('helptech_auth_profile_v2');
       if (rawProfile) {
         const parsed = JSON.parse(rawProfile);
@@ -145,6 +157,16 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
   // Sincroniza o técnico selecionado quando a lista remota carrega e o ID anterior não existir
   useEffect(() => {
     if (technicians.length === 0) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlTechId = params.get('techId');
+      if (urlTechId && technicians.some((t) => t.id === urlTechId) && selectedTechId !== urlTechId) {
+        setSelectedTechId(urlTechId);
+        return;
+      }
+    } catch {
+      // ignora
+    }
     if (!selectedTechId || !technicians.some((t) => t.id === selectedTechId)) {
       const techWithActive = technicians.find((tc) =>
         tickets.some((t) => t.assigned_technician_id === tc.id && t.status !== 'concluido' && t.status !== 'cancelado')

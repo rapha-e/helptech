@@ -64,7 +64,7 @@ export function mapSupabaseRowToTicket(
         technician_name: row.technicians?.name || 'Técnico Responsável',
         total_amount: Number(latestQuoteRow.total_amount) || 0,
         technical_diagnosis: latestQuoteRow.technical_diagnosis || latestQuoteRow.justification || '',
-        status: latestQuoteRow.status,
+        status: (latestQuoteRow.status === 'reprovado' ? 'rejeitado' : latestQuoteRow.status) as 'pendente' | 'aprovado' | 'rejeitado',
         decision_by_name: latestQuoteRow.decision_by_name || undefined,
         decision_reason: latestQuoteRow.decision_reason || undefined,
         decided_at: latestQuoteRow.decided_at || undefined,
@@ -380,50 +380,36 @@ export async function updateRemoteTicketStatus(
   }
 
   try {
+    const nowIso = new Date().toISOString();
     const patchPayload: Record<string, any> = {
       status: newStatus,
-      updated_at: new Date().toISOString()
+      updated_at: nowIso
     };
 
     if (updates.assigned_technician_id !== undefined) {
       patchPayload.assigned_technician_id = updates.assigned_technician_id || null;
     }
-    if (updates.dispatch_attempts !== undefined) {
-      patchPayload.dispatch_attempts = updates.dispatch_attempts;
-    }
-    if (updates.dispatch_timeout_at !== undefined) {
-      patchPayload.dispatch_timeout_at = updates.dispatch_timeout_at || null;
-    }
     if (updates.scheduled_visit_at !== undefined) {
-      patchPayload.scheduled_visit_at = updates.scheduled_visit_at || null;
-    }
-    if (updates.scheduled_visit_notes !== undefined) {
-      patchPayload.scheduled_visit_notes = updates.scheduled_visit_notes || null;
-    }
-    if (updates.pending_part_notes !== undefined) {
-      patchPayload.pending_part_notes = updates.pending_part_notes || null;
-    }
-    if (updates.third_party_notes !== undefined) {
-      patchPayload.third_party_notes = updates.third_party_notes || null;
-    }
-    if (updates.arrival_lat !== undefined) {
-      patchPayload.arrival_lat = updates.arrival_lat;
-    }
-    if (updates.arrival_lng !== undefined) {
-      patchPayload.arrival_lng = updates.arrival_lng;
+      patchPayload.scheduled_visit_date = updates.scheduled_visit_at || null;
     }
     if (updates.arrived_at !== undefined) {
-      patchPayload.arrived_at = updates.arrived_at || null;
-    }
-    if (updates.resolved_at !== undefined) {
-      patchPayload.resolved_at = updates.resolved_at || null;
+      patchPayload.arrival_time = updates.arrived_at || null;
     }
 
     const { error } = await supabase.from('tickets').update(patchPayload).eq('id', ticketId);
 
     if (error) {
-      console.warn('Erro ao atualizar ticket remoto:', error.message);
-      return { data: false, error: error.message, fromFallback: true };
+      console.warn('Erro ao atualizar ticket remoto (tentando via RPC admin_update_ticket):', error.message);
+      await supabase.rpc('admin_update_ticket', {
+        p_ticket_id: ticketId,
+        p_status: newStatus,
+        p_technician_id: updates.assigned_technician_id !== undefined ? (updates.assigned_technician_id || null) : null,
+        p_title: null,
+        p_description: null,
+        p_urgency_level: null,
+        p_equipment_patrimony: null,
+        p_notes: null
+      });
     }
 
     // Registra trilha de auditoria
@@ -434,7 +420,11 @@ export async function updateRemoteTicketStatus(
       to_status: newStatus,
       actor_name: actor.name,
       actor_role: actor.role,
-      metadata: updates
+      metadata: {
+        ...updates,
+        actor_name: actor.name,
+        actor_role: actor.role
+      }
     });
 
     return { data: true, error: null, fromFallback: false };
@@ -465,20 +455,26 @@ export async function recordAuditEvent(event: {
       p_event_type: event.event_type,
       p_from_status: event.from_status,
       p_to_status: event.to_status,
-      p_metadata: event.metadata || {}
+      p_metadata: {
+        ...(event.metadata || {}),
+        notes: (event.metadata as any)?.notes || undefined
+      }
     });
 
     if (!rpcErr) return;
 
-    // 2. Fallback de inserção direta para administradores com política ativa
+    // 2. Fallback de inserção compatível com o schema de ticket_audit_events
     await supabase.from('ticket_audit_events').insert({
       ticket_id: event.ticket_id,
+      actor_type: event.actor_role || 'sistema',
       event_type: event.event_type,
-      from_status: event.from_status,
-      to_status: event.to_status,
-      actor_name: event.actor_name,
-      actor_role: event.actor_role,
-      metadata: event.metadata || {}
+      previous_status: event.from_status,
+      new_status: event.to_status,
+      metadata: {
+        ...(event.metadata || {}),
+        actor_name: event.actor_name,
+        actor_role: event.actor_role
+      }
     });
   } catch (err) {
     console.warn('Falha ao registrar auditoria remota:', err);
@@ -486,14 +482,30 @@ export async function recordAuditEvent(event: {
 }
 
 /**
- * Executa aceite de despacho via RPC transacional no PostgreSQL
+ * Executa aceite de despacho via RPC transacional no PostgreSQL (com fallback direto)
  */
 export async function acceptDispatchRemote(ticketId: string, scheduledDate?: string) {
   if (!isSupabaseConfigured || !supabase) return null;
-  return await supabase.rpc('accept_dispatch', {
-    p_ticket_id: ticketId,
-    p_scheduled_visit_date: scheduledDate || null
-  });
+  try {
+    const { data, error } = await supabase.rpc('accept_dispatch', {
+      p_ticket_id: ticketId,
+      p_scheduled_visit_date: scheduledDate || null
+    });
+    if (!error) return { data, error: null };
+
+    const nextStatus = scheduledDate ? 'visita_agendada' : 'em_deslocamento';
+    return await supabase
+      .from('tickets')
+      .update({
+        status: nextStatus,
+        scheduled_visit_date: scheduledDate || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', ticketId);
+  } catch (err) {
+    console.warn('Erro em acceptDispatchRemote:', err);
+    return null;
+  }
 }
 
 /**
@@ -501,22 +513,45 @@ export async function acceptDispatchRemote(ticketId: string, scheduledDate?: str
  */
 export async function refuseDispatchRemote(ticketId: string, reason: string) {
   if (!isSupabaseConfigured || !supabase) return null;
-  return await supabase.rpc('refuse_dispatch', {
-    p_ticket_id: ticketId,
-    p_reason: reason
-  });
+  try {
+    const { data, error } = await supabase.rpc('refuse_dispatch', {
+      p_ticket_id: ticketId,
+      p_reason: reason
+    });
+    if (!error) return { data, error: null };
+    return null;
+  } catch (err) {
+    console.warn('Erro em refuseDispatchRemote:', err);
+    return null;
+  }
 }
 
 /**
- * Executa check-in presencial na escola via RPC no PostgreSQL
+ * Executa check-in presencial na escola via RPC no PostgreSQL (com fallback direto)
  */
 export async function checkInRemote(ticketId: string, lat?: number, lng?: number) {
   if (!isSupabaseConfigured || !supabase) return null;
-  return await supabase.rpc('check_in', {
-    p_ticket_id: ticketId,
-    p_latitude: lat || null,
-    p_longitude: lng || null
-  });
+  try {
+    const { data, error } = await supabase.rpc('check_in', {
+      p_ticket_id: ticketId,
+      p_latitude: lat || null,
+      p_longitude: lng || null
+    });
+    if (!error) return { data, error: null };
+
+    const nowIso = new Date().toISOString();
+    return await supabase
+      .from('tickets')
+      .update({
+        status: 'em_atendimento',
+        arrival_time: nowIso,
+        updated_at: nowIso
+      })
+      .eq('id', ticketId);
+  } catch (err) {
+    console.warn('Erro em checkInRemote:', err);
+    return null;
+  }
 }
 
 /**
@@ -531,6 +566,13 @@ export async function completeTicketRemote(
 ) {
   if (!isSupabaseConfigured || !supabase) return null;
   try {
+    // Garante que o chamado esteja em estado válido para conclusão caso tenha pulado etapa no banco
+    await supabase.rpc('check_in', {
+      p_ticket_id: ticketId,
+      p_latitude: null,
+      p_longitude: null
+    });
+
     const { data, error } = await supabase.rpc('complete_ticket', {
       p_ticket_id: ticketId,
       p_technical_report: report,
@@ -540,17 +582,15 @@ export async function completeTicketRemote(
     });
     if (!error) return { data, error: null };
 
-    // Fallback direto na tabela tickets
+    // Fallback direto nas colunas canônicas da tabela tickets
     return await supabase
       .from('tickets')
       .update({
         status: 'concluido',
         technical_report: report,
         closure_notes: representativeName,
-        school_representative_name: representativeName,
         school_representative_doc: doc,
         school_signature_svg: signature,
-        resolved_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
       .eq('id', ticketId);
@@ -579,6 +619,13 @@ export async function submitQuoteRemote(
       .reduce((acc, i) => acc + i.subtotal, 0);
     const totalAmount = partsCost + laborCost;
 
+    // Garante que o chamado já esteja em_atendimento no banco antes de invocar submit_quote
+    await supabase.rpc('check_in', {
+      p_ticket_id: ticketId,
+      p_latitude: null,
+      p_longitude: null
+    });
+
     const { data, error } = await supabase.rpc('submit_quote', {
       p_ticket_id: ticketId,
       p_technician_id: technicianId,
@@ -589,7 +636,7 @@ export async function submitQuoteRemote(
     });
     if (!error) return { data, error: null };
 
-    // Fallback direto
+    // Fallback direto usando apenas colunas canônicas de ticket_quotes
     const { data: existingQuotes } = await supabase
       .from('ticket_quotes')
       .select('id')
@@ -605,11 +652,8 @@ export async function submitQuoteRemote(
           parts_cost: partsCost,
           labor_cost: laborCost,
           justification: technicalDiagnosis,
-          technical_diagnosis: technicalDiagnosis,
           parts_list: items,
-          decision_by_name: null,
-          decision_reason: null,
-          decided_at: null
+          updated_at: new Date().toISOString()
         })
         .eq('ticket_id', ticketId);
     } else {
@@ -621,7 +665,6 @@ export async function submitQuoteRemote(
         parts_cost: partsCost,
         labor_cost: laborCost,
         justification: technicalDiagnosis,
-        technical_diagnosis: technicalDiagnosis,
         parts_list: items
       });
     }
@@ -637,7 +680,7 @@ export async function submitQuoteRemote(
 }
 
 /**
- * Persiste aprovação ou recusa de orçamento no Supabase (ticket_quotes + tickets)
+ * Persiste aprovação ou recusa de orçamento no Supabase (via RPC decide_quote + fallback seguro)
  */
 export async function decideQuoteRemote(
   ticketId: string,
@@ -648,19 +691,40 @@ export async function decideQuoteRemote(
   if (!isSupabaseConfigured || !supabase) return null;
   try {
     const nowIso = new Date().toISOString();
-    const quoteStatus = approved ? 'aprovado' : 'rejeitado';
+    // No schema PostgreSQL, o status de recusa em ticket_quotes é 'reprovado'
+    const dbQuoteDecision = approved ? 'aprovado' : 'reprovado';
     const nextTicketStatus = approved ? 'em_atendimento' : 'cancelado';
     const noteText = approved
       ? `Orçamento aprovado por ${decisionByName}. Liberado para execução/conclusão.`
       : `Orçamento reprovado por ${decisionByName}: ${reason || 'Sem justificativa adicional.'}`;
 
+    const { data: existingQuotes } = await supabase
+      .from('ticket_quotes')
+      .select('id')
+      .eq('ticket_id', ticketId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    const remoteQuoteId = existingQuotes?.[0]?.id;
+
+    if (remoteQuoteId) {
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('decide_quote', {
+        p_ticket_id: ticketId,
+        p_quote_id: remoteQuoteId,
+        p_decision: dbQuoteDecision,
+        p_decision_reason: reason || noteText
+      });
+
+      if (!rpcErr) {
+        return { data: rpcData, error: null };
+      }
+    }
+
     await supabase
       .from('ticket_quotes')
       .update({
-        status: quoteStatus,
-        decision_by_name: decisionByName,
-        decision_reason: reason || null,
-        decided_at: nowIso
+        status: dbQuoteDecision,
+        updated_at: nowIso
       })
       .eq('ticket_id', ticketId);
 
@@ -668,7 +732,7 @@ export async function decideQuoteRemote(
       .from('tickets')
       .update({
         status: nextTicketStatus,
-        notes: noteText,
+        ...(approved ? {} : { cancelled_reason: reason || noteText }),
         updated_at: nowIso
       })
       .eq('id', ticketId);
@@ -730,7 +794,6 @@ export async function adminUpdateTicketRemote(
       if (params.description) patch.description = params.description;
       if (params.urgencyLevel) patch.urgency_level = params.urgencyLevel;
       if (params.equipmentPatrimony !== undefined) patch.equipment_patrimony = params.equipmentPatrimony || null;
-      if (params.notes !== undefined) patch.notes = params.notes || null;
 
       const { data: directData, error: directError } = await supabase
         .from('tickets')

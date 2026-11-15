@@ -178,6 +178,40 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   const [changingTechTicketId, setChangingTechTicketId] = useState<string | null>(null);
   const [cardQuickNote, setCardQuickNote] = useState<Record<string, string>>({});
   const [addingNoteTicketId, setAddingNoteTicketId] = useState<string | null>(null);
+  const [recentDispatchedAlert, setRecentDispatchedAlert] = useState<{
+    ticket: Ticket;
+    tech: Technician;
+  } | null>(null);
+
+  const handleSendTechWhatsAppAlert = (ticket: Ticket, explicitTechId?: string) => {
+    const tId = explicitTechId || ticket.assigned_technician_id;
+    const tech = technicians.find((tc) => tc.id === tId);
+    if (!tech || !tech.phone) {
+      alert('Técnico sem telefone WhatsApp cadastrado.');
+      return;
+    }
+    const cleanPhone = tech.phone.replace(/\D/g, '');
+    const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+    const directTechLink = `${window.location.origin}/?view=tecnico&techId=${encodeURIComponent(tech.id)}&ticketId=${encodeURIComponent(ticket.id)}`;
+
+    const message = [
+      `🚨 *NOVO CHAMADO ATRIBUÍDO - HELP TECH INFO* 🚨`,
+      ``,
+      `Olá *${tech.name}*, uma Ordem de Serviço foi atribuída a você:`,
+      `📋 *Protocolo:* *${ticket.protocol}*`,
+      `🏫 *Unidade:* ${ticket.school_name} (CRE ${ticket.cre_name})`,
+      `📍 *Endereço:* ${ticket.school_address}`,
+      `⚠️ *Urgência:* ${ticket.urgency_level.toUpperCase()}`,
+      `🛠️ *Defeito/Serviço:* ${ticket.title}`,
+      `📝 *Descrição:* ${ticket.description}`,
+      `👤 *Solicitante:* ${ticket.requester_name} (${ticket.requester_phone})`,
+      ``,
+      `⏱️ *Acesse o link abaixo para ACEITAR ou RECUSAR o chamado:*`,
+      directTechLink
+    ].join('\n');
+
+    window.open(`https://wa.me/${fullPhone}?text=${encodeURIComponent(message)}`, '_blank');
+  };
   const [editTicketForm, setEditTicketForm] = useState<{
     status: Ticket['status'];
     technicianId: string;
@@ -213,9 +247,15 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   const handleSaveEditTicket = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTicket) return;
+    const isNewTech =
+      Boolean(editTicketForm.technicianId) &&
+      editTicketForm.technicianId !== editingTicket.assigned_technician_id;
+    const nextStatus =
+      isNewTech && editTicketForm.status === 'aberto' ? 'despachado' : editTicketForm.status;
+
     if (onAdminUpdateTicket) {
       onAdminUpdateTicket(editingTicket.id, {
-        status: editTicketForm.status,
+        status: nextStatus,
         technicianId: editTicketForm.technicianId,
         title: editTicketForm.title.trim(),
         description: editTicketForm.description.trim(),
@@ -224,15 +264,27 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
         notes: editTicketForm.notes.trim()
       });
     } else {
-      if (editTicketForm.technicianId && editTicketForm.technicianId !== editingTicket.assigned_technician_id) {
+      if (isNewTech) {
         onManualDispatch(editingTicket.id, editTicketForm.technicianId);
       }
     }
+
+    if (isNewTech) {
+      const assignedTech = technicians.find((tc) => tc.id === editTicketForm.technicianId);
+      if (assignedTech) {
+        setRecentDispatchedAlert({ ticket: editingTicket, tech: assignedTech });
+      }
+    }
+
     setShowEditTicketModal(false);
     setEditingTicket(null);
   };
 
-  const handleQuickAssignOrSwapTech = (ticketId: string, technicianId: string) => {
+  const handleQuickAssignOrSwapTech = (
+    ticketId: string,
+    technicianId: string,
+    openWhatsAppNow = false
+  ) => {
     const targetTicket = tickets.find((t) => t.id === ticketId);
     const shouldAutoDispatch = targetTicket?.status === 'aberto' && Boolean(technicianId);
     if (onAdminUpdateTicket) {
@@ -242,6 +294,13 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
       });
     } else {
       onManualDispatch(ticketId, technicianId);
+    }
+    const assignedTech = technicians.find((tc) => tc.id === technicianId);
+    if (targetTicket && assignedTech) {
+      setRecentDispatchedAlert({ ticket: targetTicket, tech: assignedTech });
+      if (openWhatsAppNow) {
+        handleSendTechWhatsAppAlert(targetTicket, technicianId);
+      }
     }
     setChangingTechTicketId(null);
   };
@@ -444,44 +503,50 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
     return acc;
   }, 0);
 
-  // Colunas do Kanban Simplificadas e Funcionais
+  // Colunas do Kanban em Sequência Cronológica Lógica (1 ➔ 5 sem retrocesso)
   const kanbanColumns = [
     {
       id: 'aberto',
-      title: '1. Novos / Triagem',
+      title: '1. Triagem / Novos',
       subtitle: 'Aguardando atribuição de técnico',
       bgHeader: 'bg-slate-100 text-slate-800 border-slate-300',
       items: filteredTickets.filter((t) => t.status === 'aberto')
     },
     {
       id: 'despachado',
-      title: '2. Despachados / Em Rota',
-      subtitle: 'Técnico acionado ou em deslocamento',
+      title: '2. Acionado / Em Rota',
+      subtitle: 'Técnico notificado ou a caminho',
       bgHeader: 'bg-amber-100 text-amber-900 border-amber-300',
       items: filteredTickets.filter((t) =>
         ['despachado', 'em_deslocamento'].includes(t.status)
       )
     },
     {
-      id: 'em_atendimento',
-      title: '3. Em Atendimento',
-      subtitle: 'Execução presencial no local',
-      bgHeader: 'bg-blue-100 text-blue-900 border-blue-300',
-      items: filteredTickets.filter((t) => t.status === 'em_atendimento')
+      id: 'diagnostico_orcamento',
+      title: '3. Diagnóstico & Orçamento',
+      subtitle: 'Avaliação no local e aprovação de orçamento',
+      bgHeader: 'bg-purple-100 text-purple-900 border-purple-300',
+      items: filteredTickets.filter(
+        (t) =>
+          t.status === 'aguardando_orcamento' ||
+          (t.status === 'em_atendimento' && (!t.quote || t.quote.status !== 'aprovado'))
+      )
     },
     {
-      id: 'aguardando_orcamento',
-      title: '4. Orçamento / Pausados',
-      subtitle: 'Aprovação do cliente ou pausa técnica',
-      bgHeader: 'bg-purple-100 text-purple-900 border-purple-300',
-      items: filteredTickets.filter((t) =>
-        ['aguardando_orcamento', 'visita_agendada', 'aguardando_peca', 'aguardando_terceiro'].includes(t.status)
+      id: 'em_execucao',
+      title: '4. Em Execução / Reparo',
+      subtitle: 'Orçamento aprovado (executando) ou pausa',
+      bgHeader: 'bg-blue-100 text-blue-900 border-blue-300',
+      items: filteredTickets.filter(
+        (t) =>
+          (t.status === 'em_atendimento' && t.quote?.status === 'aprovado') ||
+          ['visita_agendada', 'aguardando_peca', 'aguardando_terceiro'].includes(t.status)
       )
     },
     {
       id: 'concluido',
-      title: '5. Concluídos',
-      subtitle: 'Finalizados e assinados',
+      title: '5. Concluídos & Assinados',
+      subtitle: 'Serviço finalizado com OS assinada',
       bgHeader: 'bg-emerald-100 text-emerald-900 border-emerald-300',
       items: filteredTickets.filter((t) => t.status === 'concluido')
     }
@@ -742,6 +807,42 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
             </span>
           </div>
 
+          {/* Banner de Disparo de Alerta WhatsApp para o Técnico recém-atribuído */}
+          {recentDispatchedAlert && (
+            <div className="bg-emerald-50 border-2 border-emerald-400 rounded-2xl p-3.5 shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fadeIn">
+              <div className="text-xs text-emerald-950">
+                <span className="font-extrabold block text-emerald-800">
+                  ✅ Técnico {recentDispatchedAlert.tech.name} atribuído ao chamado {recentDispatchedAlert.ticket.protocol}!
+                </span>
+                <span className="text-[11px] text-emerald-700">
+                  Envie agora o alerta no WhatsApp do técnico ({recentDispatchedAlert.tech.phone}) com o link direto para ele <strong>Aceitar</strong> ou <strong>Recusar</strong> o chamado.
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleSendTechWhatsAppAlert(
+                      recentDispatchedAlert.ticket,
+                      recentDispatchedAlert.tech.id
+                    );
+                    setRecentDispatchedAlert(null);
+                  }}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-1.5 transition-colors"
+                >
+                  📲 Enviar Alerta WhatsApp p/ {recentDispatchedAlert.tech.name}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRecentDispatchedAlert(null)}
+                  className="px-2.5 py-2 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-semibold"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Colunas do Kanban */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3.5 items-start">
             {kanbanColumns.map((col) => (
@@ -822,17 +923,29 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                                 <span className="text-slate-400 font-semibold">Técnico:</span>{' '}
                                 <strong className="text-slate-900">{ticket.assigned_technician_name}</strong>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setChangingTechTicketId(
-                                    changingTechTicketId === ticket.id ? null : ticket.id
-                                  )
-                                }
-                                className="px-1.5 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[9px] font-bold shrink-0 transition-colors"
-                              >
-                                {changingTechTicketId === ticket.id ? 'Fechar' : 'Trocar'}
-                              </button>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {ticket.status !== 'concluido' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSendTechWhatsAppAlert(ticket)}
+                                    title="Enviar alerta de OS com link de Aceite/Recusa no WhatsApp do técnico"
+                                    className="px-1.5 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded text-[9px] font-bold transition-colors"
+                                  >
+                                    📲 WhatsApp
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setChangingTechTicketId(
+                                      changingTechTicketId === ticket.id ? null : ticket.id
+                                    )
+                                  }
+                                  className="px-1.5 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[9px] font-bold transition-colors"
+                                >
+                                  {changingTechTicketId === ticket.id ? 'Fechar' : 'Trocar'}
+                                </button>
+                              </div>
                             </div>
 
                             {changingTechTicketId === ticket.id && (
@@ -840,28 +953,28 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                                 <label className="text-[10px] font-bold text-blue-900 block">
                                   Trocar Técnico da OS em Andamento:
                                 </label>
-                                <div className="flex gap-1">
-                                  <select
-                                    value={
-                                      cardTechSelect[ticket.id] ||
-                                      ticket.assigned_technician_id ||
-                                      technicians[0]?.id ||
-                                      ''
-                                    }
-                                    onChange={(e) =>
-                                      setCardTechSelect({
-                                        ...cardTechSelect,
-                                        [ticket.id]: e.target.value
-                                      })
-                                    }
-                                    className="text-[10px] p-1 border rounded bg-white flex-1 truncate text-slate-800"
-                                  >
-                                    {technicians.map((t) => (
-                                      <option key={t.id} value={t.id}>
-                                        {t.name} ({t.primary_cre_name})
-                                      </option>
-                                    ))}
-                                  </select>
+                                <select
+                                  value={
+                                    cardTechSelect[ticket.id] ||
+                                    ticket.assigned_technician_id ||
+                                    technicians[0]?.id ||
+                                    ''
+                                  }
+                                  onChange={(e) =>
+                                    setCardTechSelect({
+                                      ...cardTechSelect,
+                                      [ticket.id]: e.target.value
+                                    })
+                                  }
+                                  className="w-full text-[10px] p-1 border rounded bg-white truncate text-slate-800"
+                                >
+                                  {technicians.map((t) => (
+                                    <option key={t.id} value={t.id}>
+                                      {t.name} ({t.primary_cre_name})
+                                    </option>
+                                  ))}
+                                </select>
+                                <div className="grid grid-cols-2 gap-1">
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -869,11 +982,24 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                                         cardTechSelect[ticket.id] ||
                                         ticket.assigned_technician_id ||
                                         technicians[0]?.id;
-                                      if (techId) handleQuickAssignOrSwapTech(ticket.id, techId);
+                                      if (techId) handleQuickAssignOrSwapTech(ticket.id, techId, false);
                                     }}
-                                    className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-[10px] font-bold shrink-0 shadow-xs"
+                                    className="py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-[9.5px] font-bold shadow-xs"
                                   >
                                     Salvar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const techId =
+                                        cardTechSelect[ticket.id] ||
+                                        ticket.assigned_technician_id ||
+                                        technicians[0]?.id;
+                                      if (techId) handleQuickAssignOrSwapTech(ticket.id, techId, true);
+                                    }}
+                                    className="py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[9.5px] font-bold shadow-xs"
+                                  >
+                                    📲 Salvar + WhatsApp
                                   </button>
                                 </div>
                               </div>
@@ -885,32 +1011,42 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                               <AlertTriangle size={12} className="text-amber-600 shrink-0" />
                               <span>⚠️ Sem Técnico Atribuído</span>
                             </div>
-                            <div className="flex gap-1">
-                              <select
-                                value={cardTechSelect[ticket.id] || technicians[0]?.id || ''}
-                                onChange={(e) =>
-                                  setCardTechSelect({
-                                    ...cardTechSelect,
-                                    [ticket.id]: e.target.value
-                                  })
-                                }
-                                className="text-[10px] p-1 border border-amber-300 rounded bg-white flex-1 truncate text-slate-800"
-                              >
-                                {technicians.map((t) => (
-                                  <option key={t.id} value={t.id}>
-                                    {t.name} ({t.primary_cre_name})
-                                  </option>
-                                ))}
-                              </select>
+                            <select
+                              value={cardTechSelect[ticket.id] || technicians[0]?.id || ''}
+                              onChange={(e) =>
+                                setCardTechSelect({
+                                  ...cardTechSelect,
+                                  [ticket.id]: e.target.value
+                                })
+                              }
+                              className="w-full text-[10px] p-1 border border-amber-300 rounded bg-white truncate text-slate-800"
+                            >
+                              {technicians.map((t) => (
+                                <option key={t.id} value={t.id}>
+                                  {t.name} ({t.primary_cre_name})
+                                </option>
+                              ))}
+                            </select>
+                            <div className="grid grid-cols-2 gap-1">
                               <button
                                 type="button"
                                 onClick={() => {
                                   const techId = cardTechSelect[ticket.id] || technicians[0]?.id;
-                                  if (techId) handleQuickAssignOrSwapTech(ticket.id, techId);
+                                  if (techId) handleQuickAssignOrSwapTech(ticket.id, techId, false);
                                 }}
-                                className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-[10px] font-bold shrink-0 shadow-xs"
+                                className="py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-[9.5px] font-bold shadow-xs"
                               >
                                 Atribuir
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const techId = cardTechSelect[ticket.id] || technicians[0]?.id;
+                                  if (techId) handleQuickAssignOrSwapTech(ticket.id, techId, true);
+                                }}
+                                className="py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[9.5px] font-bold shadow-xs"
+                              >
+                                📲 Atribuir + WhatsApp
                               </button>
                             </div>
                           </div>
@@ -986,9 +1122,15 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                               </select>
                             </div>
 
+                            {ticket.status === 'em_atendimento' && (!ticket.quote || ticket.quote.status !== 'aprovado') && (
+                              <div className="px-2 py-0.5 bg-purple-50 border border-purple-200 rounded text-[9.5px] font-bold text-purple-800 flex items-center justify-between">
+                                <span>🔍 Check-in Realizado • Em Diagnóstico</span>
+                              </div>
+                            )}
+
                             {ticket.quote && ticket.quote.status === 'aprovado' && (
                               <div className="px-2 py-0.5 bg-emerald-50 border border-emerald-200 rounded text-[9.5px] font-bold text-emerald-800 flex items-center justify-between">
-                                <span>✅ Orçamento Aprovado</span>
+                                <span>🛠️ Em Execução (Orç. Aprovado)</span>
                                 <span>R$ {ticket.quote.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                               </div>
                             )}

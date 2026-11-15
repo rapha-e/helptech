@@ -48,12 +48,30 @@ export const App: React.FC = () => {
     return getStoredSession();
   });
 
-  // O perfil Escola é o padrão aberto do sistema para qualquer visitante
+  // O perfil Escola é o padrão aberto do sistema para qualquer visitante (ou link direto view=tecnico)
   const [activeViewRole, setActiveViewRole] = useState<UserRole>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('view') === 'tecnico' && currentUser && (currentUser.role === 'ROLE_TECH' || currentUser.role === 'ROLE_ADMIN')) {
+        return 'ROLE_TECH';
+      }
+    } catch {
+      // ignora erro de URL
+    }
     return currentUser?.role || 'ROLE_SCHOOL';
   });
 
-  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('view') === 'tecnico' && (!currentUser || (currentUser.role !== 'ROLE_TECH' && currentUser.role !== 'ROLE_ADMIN'))) {
+        return true;
+      }
+    } catch {
+      // ignora
+    }
+    return false;
+  });
   const [viewingOsTicket, setViewingOsTicket] = useState<Ticket | null>(null);
 
   const {
@@ -100,6 +118,15 @@ export const App: React.FC = () => {
   const handleUserChange = (user: AuthUserProfile | null) => {
     setCurrentUser(user);
     if (user?.role) {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('view') === 'tecnico' && (user.role === 'ROLE_TECH' || user.role === 'ROLE_ADMIN')) {
+          setActiveViewRole('ROLE_TECH');
+          return;
+        }
+      } catch {
+        // ignora
+      }
       setActiveViewRole(user.role);
     }
   };

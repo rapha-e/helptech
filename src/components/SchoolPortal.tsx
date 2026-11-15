@@ -497,8 +497,39 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                   }}
                   className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shadow"
                 >
-                  <Phone size={14} /> Enviar Comprovante para o WhatsApp
+                  <Phone size={14} /> Comprovante (WhatsApp)
                 </button>
+                {createdSuccessTicket.assigned_technician_id && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const techNotif = createdSuccessTicket.notifications?.find(
+                        (n) => n.recipient_role === 'tecnico'
+                      );
+                      const rawTechPhone = techNotif?.recipient_phone_or_email || '61992295814';
+                      const cleanPhone = rawTechPhone.replace(/\D/g, '');
+                      const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+                      const directTechLink = `${window.location.origin}/?view=tecnico&techId=${encodeURIComponent(
+                        createdSuccessTicket.assigned_technician_id!
+                      )}&ticketId=${encodeURIComponent(createdSuccessTicket.id)}`;
+                      const text = encodeURIComponent(
+                        `🚨 *NOVO CHAMADO ATRIBUÍDO - HELP TECH INFO* 🚨\n\n` +
+                        `Olá *${createdSuccessTicket.assigned_technician_name}*, uma Ordem de Serviço foi atribuída a você:\n` +
+                        `📋 *Protocolo:* *${createdSuccessTicket.protocol}*\n` +
+                        `🏫 *Unidade:* ${createdSuccessTicket.school_name} (CRE ${createdSuccessTicket.cre_name})\n` +
+                        `📍 *Endereço:* ${createdSuccessTicket.school_address}\n` +
+                        `⚠️ *Urgência:* ${createdSuccessTicket.urgency_level.toUpperCase()}\n` +
+                        `🛠️ *Defeito/Serviço:* ${createdSuccessTicket.title}\n` +
+                        `📝 *Descrição:* ${createdSuccessTicket.description}\n\n` +
+                        `⏱️ *Acesse o link abaixo para ACEITAR ou RECUSAR o chamado:*\n${directTechLink}`
+                      );
+                      window.open(`https://wa.me/${fullPhone}?text=${text}`, '_blank');
+                    }}
+                    className="py-2.5 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow"
+                  >
+                    📲 Avisar Técnico ({createdSuccessTicket.assigned_technician_name})
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     setCreatedSuccessTicket(null);
