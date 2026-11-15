@@ -164,6 +164,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<'kanban' | 'prestacao' | 'despacho' | 'sla' | 'tecnicos' | 'usuarios' | 'sql'>('kanban');
   const [selectedCre, setSelectedCre] = useState<string>('todas');
   const [selectedUrgency, setSelectedUrgency] = useState<string>('todas');
+  const [searchKanbanQuery, setSearchKanbanQuery] = useState<string>('');
 
   // Estado para simulação de despacho
   const [simSchoolId, setSimSchoolId] = useState<string>(schools[0]?.id || '');
@@ -232,8 +233,13 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   };
 
   const handleQuickAssignOrSwapTech = (ticketId: string, technicianId: string) => {
+    const targetTicket = tickets.find((t) => t.id === ticketId);
+    const shouldAutoDispatch = targetTicket?.status === 'aberto' && Boolean(technicianId);
     if (onAdminUpdateTicket) {
-      onAdminUpdateTicket(ticketId, { technicianId });
+      onAdminUpdateTicket(ticketId, {
+        technicianId,
+        ...(shouldAutoDispatch ? { status: 'despachado' } : {})
+      });
     } else {
       onManualDispatch(ticketId, technicianId);
     }
@@ -409,7 +415,15 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   const filteredTickets = tickets.filter((t) => {
     const matchCre = selectedCre === 'todas' || t.cre_name === selectedCre;
     const matchUrgency = selectedUrgency === 'todas' || t.urgency_level === selectedUrgency;
-    return matchCre && matchUrgency;
+    const q = searchKanbanQuery.trim().toLowerCase();
+    const matchSearch =
+      !q ||
+      t.protocol.toLowerCase().includes(q) ||
+      t.school_name.toLowerCase().includes(q) ||
+      t.title.toLowerCase().includes(q) ||
+      (t.assigned_technician_name || '').toLowerCase().includes(q) ||
+      (t.requester_name || '').toLowerCase().includes(q);
+    return matchCre && matchUrgency && matchSearch;
   });
 
   // Métricas de Governança
@@ -712,6 +726,17 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
               </select>
             </div>
 
+            <div className="relative flex-1 min-w-[200px] max-w-xs">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchKanbanQuery}
+                onChange={(e) => setSearchKanbanQuery(e.target.value)}
+                placeholder="Buscar por protocolo, escola, técnico ou problema..."
+                className="w-full pl-8 pr-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+
             <span className="ml-auto text-[11px] text-slate-400 font-medium">
               Exibindo {filteredTickets.length} de {tickets.length} chamados
             </span>
@@ -939,14 +964,26 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
 
                         return (
                           <div className="pt-1.5 space-y-1">
-                            <div className="flex items-center justify-between text-[10px]">
-                              <span className="text-slate-400 font-semibold">Etapa Atual:</span>
-                              <span
-                                className="font-bold text-slate-700 truncate max-w-[140px]"
+                            <div className="flex items-center justify-between gap-1.5 text-[10px]">
+                              <span className="text-slate-400 font-semibold shrink-0">Etapa:</span>
+                              <select
+                                value={ticket.status}
+                                onChange={(e) =>
+                                  handleQuickMoveStage(ticket, e.target.value as Ticket['status'])
+                                }
                                 title={currentLabel}
+                                className="flex-1 min-w-0 font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5 text-[10px] truncate cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500"
                               >
-                                {currentLabel}
-                              </span>
+                                {KANBAN_STAGES_FLOW.map((st) => (
+                                  <option
+                                    key={st.status}
+                                    value={st.status}
+                                    disabled={st.status === 'concluido' && hasPendingQuote}
+                                  >
+                                    {st.label}
+                                  </option>
+                                ))}
+                              </select>
                             </div>
 
                             {ticket.quote && ticket.quote.status === 'aprovado' && (

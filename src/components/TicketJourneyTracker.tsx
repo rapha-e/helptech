@@ -43,7 +43,7 @@ export const TicketJourneyTracker: React.FC<TicketJourneyTrackerProps> = ({ tick
       desc: ticket.arrived_at ? 'Check-in realizado' : 'Em deslocamento / rota',
       icon: Wrench,
       active: ['em_atendimento', 'visita_agendada', 'aguardando_orcamento', 'aguardando_peca', 'aguardando_terceiro', 'concluido'].includes(ticket.status),
-      done: ['aguardando_orcamento', 'aguardando_peca', 'aguardando_terceiro', 'concluido'].includes(ticket.status)
+      done: Boolean(ticket.arrived_at) || Boolean(ticket.quote) || ['aguardando_orcamento', 'aguardando_peca', 'aguardando_terceiro', 'concluido'].includes(ticket.status)
     },
     {
       id: 'pecas_orcamento',
@@ -52,8 +52,8 @@ export const TicketJourneyTracker: React.FC<TicketJourneyTrackerProps> = ({ tick
         ? `R$ ${ticket.quote.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${ticket.quote.status})`
         : 'Sem pendência de peças',
       icon: PackageCheck,
-      active: ['aguardando_orcamento', 'aguardando_peca', 'aguardando_terceiro', 'concluido'].includes(ticket.status),
-      done: ['concluido'].includes(ticket.status)
+      active: Boolean(ticket.quote) || ['aguardando_orcamento', 'aguardando_peca', 'aguardando_terceiro', 'concluido'].includes(ticket.status),
+      done: ['concluido'].includes(ticket.status) || ticket.quote?.status === 'aprovado'
     },
     {
       id: 'conclusao',

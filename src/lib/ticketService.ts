@@ -49,23 +49,29 @@ export function mapSupabaseRowToTicket(
     sla_resolution_hours: 48
   };
 
-  const rawQuoteItems = row.ticket_quotes?.[0]?.ticket_quote_items || row.ticket_quotes?.[0]?.parts_list || [];
-  const quote = row.ticket_quotes?.[0]
+  const sortedQuotes = Array.isArray(row.ticket_quotes)
+    ? [...row.ticket_quotes].sort(
+        (a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      )
+    : [];
+  const latestQuoteRow = sortedQuotes[0];
+  const rawQuoteItems = latestQuoteRow?.ticket_quote_items || latestQuoteRow?.parts_list || [];
+  const quote = latestQuoteRow
     ? {
-        id: row.ticket_quotes[0].id,
+        id: latestQuoteRow.id,
         ticket_id: row.id,
-        technician_id: row.ticket_quotes[0].technician_id,
+        technician_id: latestQuoteRow.technician_id,
         technician_name: row.technicians?.name || 'Técnico Responsável',
-        total_amount: Number(row.ticket_quotes[0].total_amount) || 0,
-        technical_diagnosis: row.ticket_quotes[0].technical_diagnosis || row.ticket_quotes[0].justification || '',
-        status: row.ticket_quotes[0].status,
-        decision_by_name: row.ticket_quotes[0].decision_by_name || undefined,
-        decision_reason: row.ticket_quotes[0].decision_reason || undefined,
-        decided_at: row.ticket_quotes[0].decided_at || undefined,
-        created_at: row.ticket_quotes[0].created_at,
+        total_amount: Number(latestQuoteRow.total_amount) || 0,
+        technical_diagnosis: latestQuoteRow.technical_diagnosis || latestQuoteRow.justification || '',
+        status: latestQuoteRow.status,
+        decision_by_name: latestQuoteRow.decision_by_name || undefined,
+        decision_reason: latestQuoteRow.decision_reason || undefined,
+        decided_at: latestQuoteRow.decided_at || undefined,
+        created_at: latestQuoteRow.created_at,
         items: (Array.isArray(rawQuoteItems) ? rawQuoteItems : []).map((item: any, idx: number) => ({
           id: item.id || `qi-${idx}`,
-          quote_id: item.quote_id || row.ticket_quotes[0].id,
+          quote_id: item.quote_id || latestQuoteRow.id,
           item_type: item.item_type || 'peca',
           item_name: item.item_name || item.name || 'Item',
           quantity: Number(item.quantity) || 1,
@@ -584,23 +590,102 @@ export async function submitQuoteRemote(
     if (!error) return { data, error: null };
 
     // Fallback direto
-    await supabase.from('ticket_quotes').insert({
-      ticket_id: ticketId,
-      technician_id: technicianId,
-      status: 'pendente',
-      total_amount: totalAmount,
-      parts_cost: partsCost,
-      labor_cost: laborCost,
-      justification: technicalDiagnosis,
-      technical_diagnosis: technicalDiagnosis,
-      parts_list: items
-    });
+    const { data: existingQuotes } = await supabase
+      .from('ticket_quotes')
+      .select('id')
+      .eq('ticket_id', ticketId);
+
+    if (existingQuotes && existingQuotes.length > 0) {
+      await supabase
+        .from('ticket_quotes')
+        .update({
+          technician_id: technicianId,
+          status: 'pendente',
+          total_amount: totalAmount,
+          parts_cost: partsCost,
+          labor_cost: laborCost,
+          justification: technicalDiagnosis,
+          technical_diagnosis: technicalDiagnosis,
+          parts_list: items,
+          decision_by_name: null,
+          decision_reason: null,
+          decided_at: null
+        })
+        .eq('ticket_id', ticketId);
+    } else {
+      await supabase.from('ticket_quotes').insert({
+        ticket_id: ticketId,
+        technician_id: technicianId,
+        status: 'pendente',
+        total_amount: totalAmount,
+        parts_cost: partsCost,
+        labor_cost: laborCost,
+        justification: technicalDiagnosis,
+        technical_diagnosis: technicalDiagnosis,
+        parts_list: items
+      });
+    }
+
     return await supabase
       .from('tickets')
       .update({ status: 'aguardando_orcamento', updated_at: new Date().toISOString() })
       .eq('id', ticketId);
   } catch (err) {
     console.warn('Erro em submitQuoteRemote:', err);
+    return null;
+  }
+}
+
+/**
+ * Persiste aprovação ou recusa de orçamento no Supabase (ticket_quotes + tickets)
+ */
+export async function decideQuoteRemote(
+  ticketId: string,
+  approved: boolean,
+  decisionByName: string,
+  reason?: string
+) {
+  if (!isSupabaseConfigured || !supabase) return null;
+  try {
+    const nowIso = new Date().toISOString();
+    const quoteStatus = approved ? 'aprovado' : 'rejeitado';
+    const nextTicketStatus = approved ? 'em_atendimento' : 'cancelado';
+    const noteText = approved
+      ? `Orçamento aprovado por ${decisionByName}. Liberado para execução/conclusão.`
+      : `Orçamento reprovado por ${decisionByName}: ${reason || 'Sem justificativa adicional.'}`;
+
+    await supabase
+      .from('ticket_quotes')
+      .update({
+        status: quoteStatus,
+        decision_by_name: decisionByName,
+        decision_reason: reason || null,
+        decided_at: nowIso
+      })
+      .eq('ticket_id', ticketId);
+
+    const { data, error } = await supabase
+      .from('tickets')
+      .update({
+        status: nextTicketStatus,
+        notes: noteText,
+        updated_at: nowIso
+      })
+      .eq('id', ticketId);
+
+    await recordAuditEvent({
+      ticket_id: ticketId,
+      event_type: approved ? 'QUOTE_APPROVED' : 'QUOTE_REJECTED',
+      from_status: 'aguardando_orcamento',
+      to_status: nextTicketStatus,
+      actor_name: decisionByName,
+      actor_role: 'Cliente / Gestão',
+      metadata: { notes: noteText, reason: reason || null }
+    });
+
+    return { data, error };
+  } catch (err) {
+    console.warn('Erro em decideQuoteRemote:', err);
     return null;
   }
 }
@@ -645,6 +730,7 @@ export async function adminUpdateTicketRemote(
       if (params.description) patch.description = params.description;
       if (params.urgencyLevel) patch.urgency_level = params.urgencyLevel;
       if (params.equipmentPatrimony !== undefined) patch.equipment_patrimony = params.equipmentPatrimony || null;
+      if (params.notes !== undefined) patch.notes = params.notes || null;
 
       const { data: directData, error: directError } = await supabase
         .from('tickets')
@@ -652,6 +738,18 @@ export async function adminUpdateTicketRemote(
         .eq('id', ticketId)
         .select()
         .single();
+
+      if (params.notes || params.status) {
+        await recordAuditEvent({
+          ticket_id: ticketId,
+          event_type: params.notes ? 'NOTE_ADDED' : 'ADMIN_STATUS_CHANGE',
+          from_status: null,
+          to_status: params.status || directData?.status || 'em_atendimento',
+          actor_name: 'Controladoria / Equipe',
+          actor_role: 'ROLE_ADMIN',
+          metadata: { notes: params.notes || undefined }
+        });
+      }
 
       if (directError) {
         return { data: null, error: directError.message, fromFallback: true };

@@ -32,7 +32,8 @@ import {
   updateRemoteTicketStatus,
   adminUpdateTicketRemote,
   completeTicketRemote,
-  submitQuoteRemote
+  submitQuoteRemote,
+  decideQuoteRemote
 } from './ticketService';
 import {
   fetchRemoteSchools,
@@ -195,13 +196,23 @@ export function useAppStore() {
                 ? localT.status
                 : remoteT.status;
 
+            // Preserva orçamento já decidido (aprovado/rejeitado) sobre eventual registro pendente antigo
+            const resolvedQuote =
+              localT.quote && localT.quote.status !== 'pendente'
+                ? localT.quote
+                : remoteT.quote && remoteT.quote.status !== 'pendente'
+                ? remoteT.quote
+                : isLocalNewer
+                ? localT.quote || remoteT.quote
+                : remoteT.quote || localT.quote;
+
             return {
               ...remoteT,
               ...(isLocalNewer ? localT : {}),
               status: resolvedStatus,
               assigned_technician_id: localT.assigned_technician_id ?? remoteT.assigned_technician_id,
               assigned_technician_name: localT.assigned_technician_name ?? remoteT.assigned_technician_name,
-              quote: localT.quote || remoteT.quote,
+              quote: resolvedQuote,
               completion: localT.completion || remoteT.completion,
               notes: localT.notes || remoteT.notes,
               history: combinedHist
@@ -597,6 +608,22 @@ export function useAppStore() {
         : [])
     ];
 
+    const nowIso = new Date().toISOString();
+    const initialHistory: TicketHistoryEntry[] = [
+      {
+        id: `hist-open-${Date.now()}`,
+        created_at: nowIso,
+        action_type: 'status_change',
+        to_status: candidate ? 'despachado' : 'aberto',
+        author_name: data.requester_name,
+        author_role: data.requester_role,
+        technician_name: candidate?.technician.name,
+        note: candidate
+          ? `Chamado aberto e despachado automaticamente para ${candidate.technician.name} (${candidate.distanceKm.toFixed(1)} km).`
+          : 'Chamado aberto na fila de triagem.'
+      }
+    ];
+
     const newTicket: Ticket = {
       id: ticketId,
       protocol,
@@ -621,14 +648,19 @@ export function useAppStore() {
       dispatch_timeout_at: candidate
         ? new Date(Date.now() + 20 * 60 * 1000).toISOString()
         : undefined,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: nowIso,
+      updated_at: nowIso,
+      history: initialHistory,
       attachments: initialAttachments,
       dispatch_logs: initialLogs,
       notifications: initialNotifications
     };
 
-    setTickets((prev) => [newTicket, ...prev]);
+    setTickets((prev) => {
+      const next = [newTicket, ...prev];
+      saveStoredTickets(next);
+      return next;
+    });
 
     // Gravação assíncrona remota no Supabase
     createRemoteTicket(newTicket, {
@@ -658,14 +690,27 @@ export function useAppStore() {
     }
 
     const tech = technicians.find((tc) => tc.id === technicianId);
-    setTickets((prev) =>
-      prev.map((t) => {
+    const nowIso = new Date().toISOString();
+    const histEntry: TicketHistoryEntry = {
+      id: `hist-acc-${Date.now()}`,
+      created_at: nowIso,
+      action_type: 'status_change',
+      from_status: target.status,
+      to_status: 'em_deslocamento',
+      author_name: tech?.name || 'Técnico de Campo',
+      author_role: 'Técnico Credenciado',
+      note: 'Chamado aceito pelo técnico. Em deslocamento para a unidade escolar.'
+    };
+
+    setTickets((prev) => {
+      const next = prev.map((t) => {
         if (t.id === ticketId) {
           return {
             ...t,
-            status: 'em_deslocamento',
+            status: 'em_deslocamento' as const,
             dispatch_timeout_at: undefined,
-            updated_at: new Date().toISOString(),
+            updated_at: nowIso,
+            history: [histEntry, ...(t.history || [])],
             dispatch_logs: [
               ...t.dispatch_logs,
               {
@@ -673,15 +718,17 @@ export function useAppStore() {
                 ticket_id: t.id,
                 technician_id: technicianId,
                 technician_name: tech?.name || 'Técnico',
-                status: 'aceito',
-                created_at: new Date().toISOString()
+                status: 'aceito' as const,
+                created_at: nowIso
               }
             ]
           };
         }
         return t;
-      })
-    );
+      });
+      saveStoredTickets(next);
+      return next;
+    });
 
     updateRemoteTicketStatus(
       ticketId,
@@ -717,9 +764,23 @@ export function useAppStore() {
       return;
     }
 
-    setTickets((prev) =>
-      prev.map((t) => {
+    const nowIso = new Date().toISOString();
+    setTickets((prev) => {
+      const next = prev.map((t) => {
         if (t.id === ticketId) {
+          const histEntry: TicketHistoryEntry = {
+            id: `hist-ref-${Date.now()}`,
+            created_at: nowIso,
+            action_type: 'status_change',
+            from_status: t.status,
+            to_status: nextStatus,
+            author_name: tech?.name || 'Técnico de Campo',
+            author_role: 'Técnico Credenciado',
+            technician_name: nextCandidate?.technician.name,
+            note: nextCandidate
+              ? `Chamado recusado por ${tech?.name || 'Técnico'} (${reason}). Redespachado para ${nextCandidate.technician.name}.`
+              : `Chamado recusado por ${tech?.name || 'Técnico'} (${reason}). Retornado para fila de triagem.`
+          };
           const updatedLogs = [
             ...t.dispatch_logs,
             {
@@ -729,7 +790,7 @@ export function useAppStore() {
               technician_name: tech?.name || 'Técnico',
               status: 'recusado' as const,
               refusal_reason: reason,
-              created_at: new Date().toISOString()
+              created_at: nowIso
             }
           ];
 
@@ -740,7 +801,7 @@ export function useAppStore() {
               technician_id: nextCandidate.technician.id,
               technician_name: nextCandidate.technician.name,
               status: 'notificado' as const,
-              created_at: new Date().toISOString()
+              created_at: nowIso
             });
 
             return {
@@ -750,7 +811,8 @@ export function useAppStore() {
               assigned_technician_name: nextCandidate.technician.name,
               dispatch_attempts: t.dispatch_attempts + 1,
               dispatch_timeout_at: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
-              updated_at: new Date().toISOString(),
+              updated_at: nowIso,
+              history: [histEntry, ...(t.history || [])],
               dispatch_logs: updatedLogs
             };
           } else {
@@ -760,14 +822,17 @@ export function useAppStore() {
               assigned_technician_id: undefined,
               assigned_technician_name: undefined,
               dispatch_timeout_at: undefined,
-              updated_at: new Date().toISOString(),
+              updated_at: nowIso,
+              history: [histEntry, ...(t.history || [])],
               dispatch_logs: updatedLogs
             };
           }
         }
         return t;
-      })
-    );
+      });
+      saveStoredTickets(next);
+      return next;
+    });
 
     updateRemoteTicketStatus(
       ticketId,
@@ -818,22 +883,36 @@ export function useAppStore() {
     );
 
     const withinRadius = distance <= 1.5;
+    const nowIso = new Date().toISOString();
+    const histEntry: TicketHistoryEntry = {
+      id: `hist-chk-${Date.now()}`,
+      created_at: nowIso,
+      action_type: 'status_change',
+      from_status: ticket.status,
+      to_status: 'em_atendimento',
+      author_name: tech?.name || ticket.assigned_technician_name || 'Técnico de Campo',
+      author_role: 'Técnico Credenciado',
+      note: `Check-in presencial realizado via GPS (${distance.toFixed(2)} km da unidade). Atendimento iniciado.`
+    };
 
-    setTickets((prev) =>
-      prev.map((t) => {
+    setTickets((prev) => {
+      const next = prev.map((t) => {
         if (t.id === ticketId) {
           return {
             ...t,
-            status: 'em_atendimento',
+            status: 'em_atendimento' as const,
             arrival_lat: currentLat,
             arrival_lng: currentLng,
-            arrived_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
+            arrived_at: nowIso,
+            updated_at: nowIso,
+            history: [histEntry, ...(t.history || [])]
           };
         }
         return t;
-      })
-    );
+      });
+      saveStoredTickets(next);
+      return next;
+    });
 
     updateRemoteTicketStatus(
       ticketId,
@@ -992,13 +1071,30 @@ export function useAppStore() {
       return next;
     });
 
-    updateRemoteTicketStatus(
-      ticketId,
-      nextStatus,
-      {},
-      { name: decisionByName, role: 'GESTOR_OU_CENTRAL' },
-      'aguardando_orcamento'
-    );
+    // Baixa automática de peças do estoque WMS quando orçamento é aprovado
+    if (approved && target.quote?.items) {
+      setInventory((prevInv) => {
+        const nextInv = prevInv.map((invItem) => {
+          const matchedQuoteItem = target.quote?.items.find(
+            (qi) =>
+              qi.item_type === 'peca' &&
+              (invItem.name.toLowerCase().includes(qi.item_name.toLowerCase()) ||
+                qi.item_name.toLowerCase().includes(invItem.name.toLowerCase()))
+          );
+          if (matchedQuoteItem) {
+            return {
+              ...invItem,
+              quantity_in_stock: Math.max(0, invItem.quantity_in_stock - matchedQuoteItem.quantity)
+            };
+          }
+          return invItem;
+        });
+        saveStoredInventory(nextInv);
+        return nextInv;
+      });
+    }
+
+    decideQuoteRemote(ticketId, approved, decisionByName, reason);
   };
 
   /**
@@ -1331,8 +1427,8 @@ export function useAppStore() {
       }
     }
 
-    setTickets((prev) =>
-      prev.map((t) => {
+    setTickets((prev) => {
+      const next = prev.map((t) => {
         if (t.id === ticketId) {
           const nextStatus = params.status || t.status;
           const nextTechId =
@@ -1395,8 +1491,10 @@ export function useAppStore() {
           };
         }
         return t;
-      })
-    );
+      });
+      saveStoredTickets(next);
+      return next;
+    });
 
     await adminUpdateTicketRemote(ticketId, {
       status: params.status,
@@ -1413,9 +1511,21 @@ export function useAppStore() {
     const tech = technicians.find((t) => t.id === technicianId);
     if (!tech) return;
 
-    setTickets((prev) =>
-      prev.map((t) => {
+    const nowIso = new Date().toISOString();
+    setTickets((prev) => {
+      const next = prev.map((t) => {
         if (t.id === ticketId) {
+          const histEntry: TicketHistoryEntry = {
+            id: `hist-man-${Date.now()}`,
+            created_at: nowIso,
+            action_type: 'status_change',
+            from_status: t.status,
+            to_status: 'despachado',
+            author_name: 'Operador da Central',
+            author_role: 'Controladoria',
+            technician_name: tech.name,
+            note: `Chamado atribuído/despachado manualmente para ${tech.name}.`
+          };
           const notif = {
             id: `notif-dispatch-${Date.now()}`,
             ticket_id: t.id,
@@ -1425,7 +1535,7 @@ export function useAppStore() {
             channel: 'push' as const,
             title: 'Novo Chamado Despachado para Você',
             message: `Novo chamado ${t.protocol} da escola ${t.school_name} foi atribuído a você. Aceite em até 20 minutos no PWA.`,
-            sent_at: new Date().toISOString()
+            sent_at: nowIso
           };
           return {
             ...t,
@@ -1434,7 +1544,8 @@ export function useAppStore() {
             assigned_technician_name: tech.name,
             dispatch_attempts: t.dispatch_attempts + 1,
             dispatch_timeout_at: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
+            updated_at: nowIso,
+            history: [histEntry, ...(t.history || [])],
             notifications: [...(t.notifications || []), notif],
             dispatch_logs: [
               ...t.dispatch_logs,
@@ -1444,14 +1555,16 @@ export function useAppStore() {
                 technician_id: tech.id,
                 technician_name: tech.name,
                 status: 'notificado' as const,
-                created_at: new Date().toISOString()
+                created_at: nowIso
               }
             ]
           };
         }
         return t;
-      })
-    );
+      });
+      saveStoredTickets(next);
+      return next;
+    });
 
     updateRemoteTicketStatus(
       ticketId,

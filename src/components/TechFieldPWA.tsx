@@ -115,10 +115,43 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
   onAddTicketNote,
   onViewOS
 }) => {
-  const [selectedTechId, setSelectedTechId] = useState<string>(technicians[0]?.id || '');
+  const [selectedTechId, setSelectedTechId] = useState<string>(() => {
+    try {
+      const rawProfile = localStorage.getItem('helptech_auth_profile_v2');
+      if (rawProfile) {
+        const parsed = JSON.parse(rawProfile);
+        if (parsed.technicianId && technicians.some((t) => t.id === parsed.technicianId)) {
+          return parsed.technicianId;
+        }
+        if (parsed.email) {
+          const byEmail = technicians.find(
+            (t) => t.email?.toLowerCase() === parsed.email.toLowerCase()
+          );
+          if (byEmail) return byEmail.id;
+        }
+      }
+    } catch {
+      // ignora erro de leitura
+    }
+    const techWithActive = technicians.find((tc) =>
+      tickets.some((t) => t.assigned_technician_id === tc.id && t.status !== 'concluido' && t.status !== 'cancelado')
+    );
+    return techWithActive?.id || technicians[0]?.id || '';
+  });
   const [refusalReason, setRefusalReason] = useState<string>('');
   const [refusalModalTicketId, setRefusalModalTicketId] = useState<string | null>(null);
   const [techNoteInputs, setTechNoteInputs] = useState<Record<string, string>>({});
+
+  // Sincroniza o técnico selecionado quando a lista remota carrega e o ID anterior não existir
+  useEffect(() => {
+    if (technicians.length === 0) return;
+    if (!selectedTechId || !technicians.some((t) => t.id === selectedTechId)) {
+      const techWithActive = technicians.find((tc) =>
+        tickets.some((t) => t.assigned_technician_id === tc.id && t.status !== 'concluido' && t.status !== 'cancelado')
+      );
+      setSelectedTechId(techWithActive?.id || technicians[0].id);
+    }
+  }, [technicians, tickets, selectedTechId]);
 
   // Agendamento de visita
   const [scheduleModalTicketId, setScheduleModalTicketId] = useState<string | null>(null);
@@ -524,18 +557,29 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
             Timeout de 20 minutos. Sem aceite, a vaga será repassada ao próximo técnico mais próximo.
           </span>
 
-          <div className="flex gap-2 mt-4">
+          <div className="flex flex-col gap-2 mt-4">
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleAcceptTicket(pendingDispatchTicket.id)}
+                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                <CheckCircle2 size={16} /> Aceitar Deslocamento
+              </button>
+              <button
+                onClick={() => setRefusalModalTicketId(pendingDispatchTicket.id)}
+                className="px-4 py-3 bg-white hover:bg-rose-50 text-rose-600 border border-rose-300 rounded-2xl text-xs font-bold transition-colors flex items-center justify-center gap-1"
+              >
+                <XCircle size={16} /> Recusar
+              </button>
+            </div>
             <button
-              onClick={() => handleAcceptTicket(pendingDispatchTicket.id)}
-              className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-1.5"
+              type="button"
+              onClick={() => {
+                handlePerformCheckIn(pendingDispatchTicket);
+              }}
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-bold shadow transition-transform active:scale-95 flex items-center justify-center gap-1.5"
             >
-              <CheckCircle2 size={16} /> Aceitar Deslocamento
-            </button>
-            <button
-              onClick={() => setRefusalModalTicketId(pendingDispatchTicket.id)}
-              className="px-4 py-3 bg-white hover:bg-rose-50 text-rose-600 border border-rose-300 rounded-2xl text-xs font-bold transition-colors flex items-center justify-center gap-1"
-            >
-              <XCircle size={16} /> Recusar
+              <Navigation size={14} /> Já Estou no Local (Aceitar + Check-in Direto)
             </button>
           </div>
         </div>
@@ -1659,6 +1703,25 @@ export const TechFieldPWA: React.FC<TechFieldPWAProps> = ({
                 </div>
               </div>
             </div>
+
+            {timelineTicket.history && timelineTicket.history.length > 0 && (
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 block">
+                  Registros de Notas & Histórico ({timelineTicket.history.length})
+                </span>
+                <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                  {timelineTicket.history.map((h) => (
+                    <div key={h.id} className="bg-white border border-slate-200 rounded-lg p-2 text-[11px]">
+                      <div className="flex items-center justify-between text-[10px] text-slate-400">
+                        <span className="font-bold text-slate-700">{h.author_name} ({h.author_role})</span>
+                        <span>{new Date(h.created_at).toLocaleString('pt-BR')}</span>
+                      </div>
+                      {h.note && <p className="text-slate-700 mt-0.5 font-medium">{h.note}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="flex gap-2 pt-2 border-t">
               <button
