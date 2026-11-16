@@ -87,12 +87,13 @@ export function getStoredTechnicians(): Technician[] {
   try {
     const raw = localStorage.getItem(TECHNICIANS_STORAGE_KEY);
     if (raw) {
-      return JSON.parse(raw);
+      const parsed: Technician[] = JSON.parse(raw);
+      return parsed.filter((t) => t.active !== false);
     }
   } catch (err) {
     console.error('Falha ao ler técnicos do storage:', err);
   }
-  return TECHNICIANS;
+  return TECHNICIANS.filter((t) => t.active !== false);
 }
 
 export function saveStoredTechnicians(techs: Technician[]) {
@@ -291,8 +292,9 @@ export function useAppStore() {
         setSchools(remoteSchs.data);
       }
       if (remoteTechs.data && !remoteTechs.fromFallback) {
-        setTechnicians(remoteTechs.data);
-        saveStoredTechnicians(remoteTechs.data);
+        const activeOnly = remoteTechs.data.filter((t) => t.active !== false);
+        setTechnicians(activeOnly);
+        saveStoredTechnicians(activeOnly);
       }
       if (remoteUsers.data && !remoteUsers.fromFallback) {
         setSystemUsers(remoteUsers.data);
@@ -435,12 +437,26 @@ export function useAppStore() {
           (payload: any) => {
             const { eventType, new: newRow } = payload;
             if (eventType === 'UPDATE' && newRow?.id) {
-              setTechnicians((prev) =>
-                prev.map((tc) => (tc.id === newRow.id ? { ...tc, ...newRow } : tc))
-              );
+              if (newRow.active === false) {
+                setTechnicians((prev) => {
+                  const next = prev.filter((tc) => tc.id !== newRow.id);
+                  saveStoredTechnicians(next);
+                  return next;
+                });
+              } else {
+                setTechnicians((prev) => {
+                  const next = prev.map((tc) => (tc.id === newRow.id ? { ...tc, ...newRow } : tc));
+                  saveStoredTechnicians(next);
+                  return next;
+                });
+              }
             } else {
               fetchRemoteTechnicians().then((res) => {
-                if (res.data) setTechnicians(res.data);
+                if (res.data) {
+                  const activeOnly = res.data.filter((t) => t.active !== false);
+                  setTechnicians(activeOnly);
+                  saveStoredTechnicians(activeOnly);
+                }
               });
             }
           }
@@ -1734,7 +1750,7 @@ export function useAppStore() {
   const deleteTechnician = async (id: string) => {
     const target = technicians.find((t) => t.id === id);
     setTechnicians((prev) => {
-      const next = prev.filter((tech) => tech.id !== id);
+      const next = prev.filter((tech) => tech.id !== id && (!target?.email || tech.email !== target.email));
       saveStoredTechnicians(next);
       return next;
     });

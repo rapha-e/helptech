@@ -726,7 +726,7 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                 : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
             }`}
           >
-            <Wrench size={14} /> Técnicos ({technicians.length})
+            <Wrench size={14} /> Técnicos ({technicians.filter((t) => t.active !== false).length})
           </button>
           <button
             onClick={() => setActiveTab('usuarios')}
@@ -2073,174 +2073,190 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
           </div>
 
           {/* Cards de Resumo Operacional */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
-              <div className="text-[11px] font-bold uppercase text-slate-400">Total de Técnicos</div>
-              <div className="text-xl font-black text-slate-900 mt-0.5">{technicians.length}</div>
-            </div>
-            <div className="bg-white p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/20 shadow-sm">
-              <div className="text-[11px] font-bold uppercase text-emerald-700">Disponíveis Agora</div>
-              <div className="text-xl font-black text-emerald-600 mt-0.5">
-                {technicians.filter((t) => t.status === 'disponivel').length}
-              </div>
-            </div>
-            <div className="bg-white p-3.5 rounded-xl border border-amber-200 bg-amber-50/20 shadow-sm">
-              <div className="text-[11px] font-bold uppercase text-amber-700">Ocupados em Rota</div>
-              <div className="text-xl font-black text-amber-600 mt-0.5">
-                {technicians.filter((t) => t.status === 'ocupado').length}
-              </div>
-            </div>
-            <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
-              <div className="text-[11px] font-bold uppercase text-slate-500">Indisponíveis / Folga</div>
-              <div className="text-xl font-black text-slate-600 mt-0.5">
-                {technicians.filter((t) => t.status === 'indisponivel' || t.status === 'suspenso').length}
-              </div>
-            </div>
-          </div>
+          {(() => {
+            const visibleTechnicians = technicians.filter(
+              (t) => t.active !== false
+            );
+            return (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+                    <div className="text-[11px] font-bold uppercase text-slate-400">Total de Técnicos</div>
+                    <div className="text-xl font-black text-slate-900 mt-0.5">{visibleTechnicians.length}</div>
+                  </div>
+                  <div className="bg-white p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/20 shadow-sm">
+                    <div className="text-[11px] font-bold uppercase text-emerald-700">Disponíveis Agora</div>
+                    <div className="text-xl font-black text-emerald-600 mt-0.5">
+                      {visibleTechnicians.filter((t) => t.status === 'disponivel').length}
+                    </div>
+                  </div>
+                  <div className="bg-white p-3.5 rounded-xl border border-amber-200 bg-amber-50/20 shadow-sm">
+                    <div className="text-[11px] font-bold uppercase text-amber-700">Ocupados em Rota</div>
+                    <div className="text-xl font-black text-amber-600 mt-0.5">
+                      {visibleTechnicians.filter((t) => t.status === 'ocupado').length}
+                    </div>
+                  </div>
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+                    <div className="text-[11px] font-bold uppercase text-slate-500">Indisponíveis / Folga</div>
+                    <div className="text-xl font-black text-slate-600 mt-0.5">
+                      {visibleTechnicians.filter((t) => t.status === 'indisponivel' || t.status === 'suspenso').length}
+                    </div>
+                  </div>
+                </div>
 
-          {/* Tabela de Técnicos */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-200">
-                    <th className="py-3 px-4">Técnico & Contato</th>
-                    <th className="py-3 px-4">CRE Base & Raio</th>
-                    <th className="py-3 px-4">Coordenadas Base</th>
-                    <th className="py-3 px-4">Carga Ativa</th>
-                    <th className="py-3 px-4">Status Operacional</th>
-                    <th className="py-3 px-4 text-right">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {technicians
-                    .filter((t) => {
-                      const matchSearch =
-                        t.name.toLowerCase().includes(searchTech.toLowerCase()) ||
-                        t.email.toLowerCase().includes(searchTech.toLowerCase()) ||
-                        t.phone.includes(searchTech);
-                      const matchCre = filterCreTech === 'todas' || t.primary_cre_id === filterCreTech;
-                      return matchSearch && matchCre;
-                    })
-                    .map((tech) => {
-                      const activeTicketsCount = tickets.filter(
-                        (t) =>
-                          t.assigned_technician_id === tech.id &&
-                          !['concluido', 'recusado'].includes(t.status)
-                      ).length;
-
-                      const cleanPhone = tech.phone.replace(/\D/g, '');
-
-                      return (
-                        <tr key={tech.id} className="hover:bg-slate-50/70 transition-colors">
-                          <td className="py-3.5 px-4">
-                            <div className="font-bold text-slate-900 text-xs">{tech.name}</div>
-                            <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
-                              <Mail size={12} className="text-slate-400" />
-                              <span>{tech.email}</span>
-                            </div>
-                            <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
-                              <Phone size={12} className="text-slate-400" />
-                              <a
-                                href={`https://wa.me/55${cleanPhone}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-emerald-600 hover:underline font-medium"
-                              >
-                                {tech.phone} (WhatsApp)
-                              </a>
-                            </div>
-                          </td>
-
-                          <td className="py-3.5 px-4">
-                            <span className="font-semibold text-slate-800">{tech.primary_cre_name}</span>
-                            <div className="text-[10px] text-slate-400 mt-0.5">Raio: {tech.radius_km} km</div>
-                          </td>
-
-                          <td className="py-3.5 px-4 font-mono text-[11px] text-slate-500">
-                            <div className="flex items-center gap-1 text-slate-700">
-                              <MapPin size={12} className="text-blue-500" />
-                              <span>{tech.latitude.toFixed(4)}, {tech.longitude.toFixed(4)}</span>
-                            </div>
-                          </td>
-
-                          <td className="py-3.5 px-4">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={`font-bold px-2 py-0.5 rounded-full text-[11px] ${
-                                  activeTicketsCount >= tech.max_active_tickets
-                                    ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                                    : activeTicketsCount > 0
-                                    ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                    : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                }`}
-                              >
-                                {activeTicketsCount} / {tech.max_active_tickets}
-                              </span>
-                            </div>
-                            <div className="text-[10px] text-slate-400 mt-0.5">chamados em aberto</div>
-                          </td>
-
-                          <td className="py-3.5 px-4">
-                            <button
-                              onClick={() => onToggleTechnicianStatus && onToggleTechnicianStatus(tech.id)}
-                              title="Clique para alternar status operacional"
-                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all flex items-center gap-1 ${
-                                tech.status === 'disponivel'
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
-                                  : tech.status === 'ocupado'
-                                  ? 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100'
-                                  : 'bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200'
-                              }`}
-                            >
-                              <span
-                                className={`w-1.5 h-1.5 rounded-full ${
-                                  tech.status === 'disponivel'
-                                    ? 'bg-emerald-500'
-                                    : tech.status === 'ocupado'
-                                    ? 'bg-amber-500'
-                                    : 'bg-slate-400'
-                                }`}
-                              />
-                              <span className="capitalize">{tech.status}</span>
-                            </button>
-                          </td>
-
-                          <td className="py-3.5 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                onClick={() => handleOpenTechModal(tech)}
-                                className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                title="Editar Cadastro"
-                              >
-                                <Edit size={14} />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  if (
-                                    confirm(
-                                      `Tem certeza de que deseja remover o técnico "${tech.name}" da base HelpTech?`
-                                    )
-                                  ) {
-                                    if (onDeleteTechnician) {
-                                      onDeleteTechnician(tech.id);
-                                    }
-                                  }
-                                }}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                                title="Excluir Técnico"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </td>
+                {/* Tabela de Técnicos */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-200">
+                          <th className="py-3 px-4">Técnico & Contato</th>
+                          <th className="py-3 px-4">CRE Base & Raio</th>
+                          <th className="py-3 px-4">Coordenadas Base</th>
+                          <th className="py-3 px-4">Carga Ativa</th>
+                          <th className="py-3 px-4">Status Operacional</th>
+                          <th className="py-3 px-4 text-right">Ações</th>
                         </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {visibleTechnicians
+                          .filter((t) => {
+                            const matchSearch =
+                              t.name.toLowerCase().includes(searchTech.toLowerCase()) ||
+                              t.email.toLowerCase().includes(searchTech.toLowerCase()) ||
+                              t.phone.includes(searchTech);
+                            const matchCre = filterCreTech === 'todas' || t.primary_cre_id === filterCreTech;
+                            return matchSearch && matchCre;
+                          })
+                          .map((tech) => {
+                            const activeTicketsCount = tickets.filter(
+                              (t) =>
+                                t.assigned_technician_id === tech.id &&
+                                !['concluido', 'recusado'].includes(t.status)
+                            ).length;
+
+                            const cleanPhone = tech.phone.replace(/\D/g, '');
+
+                            return (
+                              <tr key={tech.id} className="hover:bg-slate-50/70 transition-colors">
+                                <td className="py-3.5 px-4">
+                                  <div className="font-bold text-slate-900 text-xs">{tech.name}</div>
+                                  <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                                    <Mail size={12} className="text-slate-400" />
+                                    <span>{tech.email}</span>
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                                    <Phone size={12} className="text-slate-400" />
+                                    <a
+                                      href={`https://wa.me/55${cleanPhone}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-emerald-600 hover:underline font-medium"
+                                    >
+                                      {tech.phone} (WhatsApp)
+                                    </a>
+                                  </div>
+                                </td>
+
+                                <td className="py-3.5 px-4">
+                                  <span className="font-semibold text-slate-800">{tech.primary_cre_name}</span>
+                                  <div className="text-[10px] text-slate-400 mt-0.5">Raio: {tech.radius_km} km</div>
+                                </td>
+
+                                <td className="py-3.5 px-4 font-mono text-[11px] text-slate-500">
+                                  <div className="flex items-center gap-1 text-slate-700">
+                                    <MapPin size={12} className="text-blue-500" />
+                                    <span>{tech.latitude.toFixed(4)}, {tech.longitude.toFixed(4)}</span>
+                                  </div>
+                                </td>
+
+                                <td className="py-3.5 px-4">
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`font-bold px-2 py-0.5 rounded-full text-[11px] ${
+                                        activeTicketsCount >= tech.max_active_tickets
+                                          ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                          : activeTicketsCount > 0
+                                          ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                          : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                      }`}
+                                    >
+                                      {activeTicketsCount} / {tech.max_active_tickets}
+                                    </span>
+                                  </div>
+                                  <div className="text-[10px] text-slate-400 mt-0.5">chamados em aberto</div>
+                                </td>
+
+                                <td className="py-3.5 px-4">
+                                  <button
+                                    onClick={() => onToggleTechnicianStatus && onToggleTechnicianStatus(tech.id)}
+                                    title="Clique para alternar status operacional"
+                                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all flex items-center gap-1 ${
+                                      tech.status === 'disponivel'
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
+                                        : tech.status === 'ocupado'
+                                        ? 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100'
+                                        : 'bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200'
+                                    }`}
+                                  >
+                                    <span
+                                      className={`w-1.5 h-1.5 rounded-full ${
+                                        tech.status === 'disponivel'
+                                          ? 'bg-emerald-500'
+                                          : tech.status === 'ocupado'
+                                          ? 'bg-amber-500'
+                                          : 'bg-slate-400'
+                                      }`}
+                                    />
+                                    <span className="capitalize">{tech.status}</span>
+                                  </button>
+                                </td>
+
+                                <td className="py-3.5 px-4 text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      onClick={() => handleOpenTechModal(tech)}
+                                      className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                      title="Editar Cadastro"
+                                    >
+                                      <Edit size={14} />
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        if (
+                                          confirm(
+                                            `Tem certeza de que deseja remover o técnico "${tech.name}" da base HelpTech?`
+                                          )
+                                        ) {
+                                          if (onDeleteTechnician) {
+                                            onDeleteTechnician(tech.id);
+                                          }
+                                        }
+                                      }}
+                                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                      title="Excluir Técnico"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        {visibleTechnicians.length === 0 && (
+                          <tr>
+                            <td colSpan={6} className="py-6 text-center text-slate-400 italic">
+                              Nenhum técnico ativo cadastrado na base HelpTech.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
 

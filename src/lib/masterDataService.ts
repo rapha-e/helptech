@@ -65,6 +65,7 @@ export async function fetchRemoteTechnicians(): Promise<RemoteServiceResult<Tech
     const { data, error } = await supabase
       .from('technicians')
       .select('*, regional_coordinations(name)')
+      .eq('active', true)
       .order('name');
 
     if (error || !data || data.length === 0) {
@@ -208,6 +209,18 @@ export async function deleteRemoteTechnician(
       if (existing?.id) targetId = existing.id;
     }
 
+    // Tenta desvincular chamados abertos atribuídos para liberar a FK antes do delete
+    try {
+      if (targetId) {
+        await supabase
+          .from('tickets')
+          .update({ assigned_technician_id: null, assigned_technician_name: null })
+          .eq('assigned_technician_id', targetId);
+      }
+    } catch {
+      // ignora se falhar
+    }
+
     // Tenta exclusão física direta
     const filterCol = targetId ? 'id' : email ? 'email' : 'id';
     const filterVal = targetId || email || id;
@@ -218,8 +231,8 @@ export async function deleteRemoteTechnician(
       .eq(filterCol, filterVal);
 
     if (delErr) {
-      // Se houver chamados vinculados a esse técnico (violação de FK), aplica inativação (soft-delete)
-      console.warn('Exclusão física com restrição de FK, inativando técnico no banco:', delErr.message);
+      // Se houver histórico não desvinculável, inativa o técnico para que não apareça mais
+      console.warn('Exclusão com histórico de OS, inativando técnico no banco:', delErr.message);
       await supabase
         .from('technicians')
         .update({ active: false, status: 'indisponivel' })
