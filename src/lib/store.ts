@@ -45,7 +45,9 @@ import {
   fetchRemoteCategories,
   fetchRemoteRegions,
   saveRemoteTechnicianWithAuth,
-  saveRemoteSystemUserWithAuth
+  saveRemoteSystemUserWithAuth,
+  deleteRemoteTechnician,
+  deleteRemoteSystemUser
 } from './masterDataService';
 import { validateStateTransition } from './stateMachine';
 
@@ -1682,15 +1684,21 @@ export function useAppStore() {
       ...techData,
       id: tempId
     };
-    setTechnicians((prev) => [newTech, ...prev]);
+    setTechnicians((prev) => {
+      const next = [newTech, ...prev];
+      saveStoredTechnicians(next);
+      return next;
+    });
 
     if (isSupabaseConfigured) {
       try {
         const res = await saveRemoteTechnicianWithAuth(techData);
         if (res.data) {
-          setTechnicians((prev) =>
-            prev.map((t) => (t.id === tempId ? { ...t, ...res.data } : t))
-          );
+          setTechnicians((prev) => {
+            const next = prev.map((t) => (t.id === tempId ? { ...t, ...res.data } : t));
+            saveStoredTechnicians(next);
+            return next;
+          });
           return res.data;
         }
       } catch (err) {
@@ -1701,33 +1709,66 @@ export function useAppStore() {
   };
 
   const updateTechnician = async (id: string, updates: Partial<Technician> & { password?: string }) => {
-    setTechnicians((prev) =>
-      prev.map((tech) => (tech.id === id ? { ...tech, ...updates } : tech))
-    );
+    setTechnicians((prev) => {
+      const next = prev.map((tech) => (tech.id === id ? { ...tech, ...updates } : tech));
+      saveStoredTechnicians(next);
+      return next;
+    });
 
     if (isSupabaseConfigured) {
       try {
-        await saveRemoteTechnicianWithAuth({ id, ...updates });
+        const res = await saveRemoteTechnicianWithAuth({ id, ...updates });
+        if (res.data) {
+          setTechnicians((prev) => {
+            const next = prev.map((tech) => (tech.id === id ? { ...tech, ...res.data } : tech));
+            saveStoredTechnicians(next);
+            return next;
+          });
+        }
       } catch (err) {
         console.warn('Erro ao atualizar técnico no banco:', err);
       }
     }
   };
 
-  const deleteTechnician = (id: string) => {
-    setTechnicians((prev) => prev.filter((tech) => tech.id !== id));
+  const deleteTechnician = async (id: string) => {
+    const target = technicians.find((t) => t.id === id);
+    setTechnicians((prev) => {
+      const next = prev.filter((tech) => tech.id !== id);
+      saveStoredTechnicians(next);
+      return next;
+    });
+
+    if (isSupabaseConfigured) {
+      try {
+        await deleteRemoteTechnician(id, target?.email);
+      } catch (err) {
+        console.warn('Erro ao deletar técnico no banco:', err);
+      }
+    }
   };
 
-  const toggleTechnicianStatus = (id: string) => {
-    setTechnicians((prev) =>
-      prev.map((tech) => {
+  const toggleTechnicianStatus = async (id: string) => {
+    let nextStatus: Technician['status'] = 'disponivel';
+    setTechnicians((prev) => {
+      const next = prev.map((tech) => {
         if (tech.id === id) {
-          const nextStatus = tech.status === 'disponivel' ? 'indisponivel' : 'disponivel';
+          nextStatus = tech.status === 'disponivel' ? 'indisponivel' : 'disponivel';
           return { ...tech, status: nextStatus };
         }
         return tech;
-      })
-    );
+      });
+      saveStoredTechnicians(next);
+      return next;
+    });
+
+    if (isSupabaseConfigured) {
+      try {
+        await saveRemoteTechnicianWithAuth({ id, status: nextStatus });
+      } catch (err) {
+        console.warn('Erro ao alternar status do técnico no banco:', err);
+      }
+    }
   };
 
   /**
@@ -1740,15 +1781,21 @@ export function useAppStore() {
       id: tempId,
       created_at: new Date().toISOString()
     };
-    setSystemUsers((prev) => [newUser, ...prev]);
+    setSystemUsers((prev) => {
+      const next = [newUser, ...prev];
+      saveStoredSystemUsers(next);
+      return next;
+    });
 
     if (isSupabaseConfigured) {
       try {
         const res = await saveRemoteSystemUserWithAuth(userData);
         if (res.data) {
-          setSystemUsers((prev) =>
-            prev.map((u) => (u.id === tempId ? { ...u, ...res.data } : u))
-          );
+          setSystemUsers((prev) => {
+            const next = prev.map((u) => (u.id === tempId ? { ...u, ...res.data } : u));
+            saveStoredSystemUsers(next);
+            return next;
+          });
           return res.data;
         }
       } catch (err) {
@@ -1759,32 +1806,66 @@ export function useAppStore() {
   };
 
   const updateSystemUser = async (id: string, updates: Partial<SystemUser> & { password?: string }) => {
-    setSystemUsers((prev) =>
-      prev.map((usr) => (usr.id === id ? { ...usr, ...updates } : usr))
-    );
+    setSystemUsers((prev) => {
+      const next = prev.map((usr) => (usr.id === id ? { ...usr, ...updates } : usr));
+      saveStoredSystemUsers(next);
+      return next;
+    });
 
     if (isSupabaseConfigured) {
       try {
-        await saveRemoteSystemUserWithAuth({ id, ...updates });
+        const res = await saveRemoteSystemUserWithAuth({ id, ...updates });
+        if (res.data) {
+          setSystemUsers((prev) => {
+            const next = prev.map((u) => (u.id === id ? { ...u, ...res.data } : u));
+            saveStoredSystemUsers(next);
+            return next;
+          });
+        }
       } catch (err) {
         console.warn('Erro ao atualizar usuário no banco:', err);
       }
     }
   };
 
-  const deleteSystemUser = (id: string) => {
-    setSystemUsers((prev) => prev.filter((usr) => usr.id !== id));
+  const deleteSystemUser = async (id: string) => {
+    const target = systemUsers.find((u) => u.id === id);
+    setSystemUsers((prev) => {
+      const next = prev.filter((usr) => usr.id !== id);
+      saveStoredSystemUsers(next);
+      return next;
+    });
+
+    if (isSupabaseConfigured) {
+      try {
+        await deleteRemoteSystemUser(id, target?.email);
+      } catch (err) {
+        console.warn('Erro ao deletar usuário no banco:', err);
+      }
+    }
   };
 
-  const toggleSystemUserActive = (id: string) => {
-    setSystemUsers((prev) =>
-      prev.map((usr) => {
+  const toggleSystemUserActive = async (id: string) => {
+    let nextActive = true;
+    setSystemUsers((prev) => {
+      const next = prev.map((usr) => {
         if (usr.id === id) {
-          return { ...usr, active: !usr.active };
+          nextActive = !usr.active;
+          return { ...usr, active: nextActive };
         }
         return usr;
-      })
-    );
+      });
+      saveStoredSystemUsers(next);
+      return next;
+    });
+
+    if (isSupabaseConfigured) {
+      try {
+        await saveRemoteSystemUserWithAuth({ id, active: nextActive });
+      } catch (err) {
+        console.warn('Erro ao alternar status do usuário no banco:', err);
+      }
+    }
   };
 
   /**

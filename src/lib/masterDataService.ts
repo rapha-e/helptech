@@ -92,6 +92,11 @@ export async function fetchRemoteTechnicians(): Promise<RemoteServiceResult<Tech
   }
 }
 
+function isUuid(str?: string | null): boolean {
+  if (!str) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+}
+
 /**
  * Salva ou atualiza técnico de campo com senha de autenticação atômica no Supabase
  */
@@ -103,8 +108,26 @@ export async function saveRemoteTechnicianWithAuth(
   }
 
   try {
-    const { data, error } = await supabase.rpc('save_technician_with_auth', {
-      p_id: techData.id && !techData.id.startsWith('tech-') ? techData.id : null,
+    // Se o ID for de seed (ex: 'tech-carlos'), tenta localizar o UUID correspondente no Supabase pelo email
+    let resolvedId: string | null = isUuid(techData.id) ? techData.id! : null;
+    if (!resolvedId && techData.email) {
+      try {
+        const { data: existing } = await supabase
+          .from('technicians')
+          .select('id')
+          .eq('email', techData.email)
+          .maybeSingle();
+        if (existing?.id) {
+          resolvedId = existing.id;
+        }
+      } catch {
+        // ignora
+      }
+    }
+
+    // Tenta primeiro a RPC atômica caso esteja instalada
+    const { data: rpcData, error: rpcError } = await supabase.rpc('save_technician_with_auth', {
+      p_id: resolvedId,
       p_name: techData.name,
       p_phone: techData.phone,
       p_email: techData.email,
@@ -117,13 +140,95 @@ export async function saveRemoteTechnicianWithAuth(
       p_password: techData.password || null
     });
 
-    if (error) {
-      return { data: null, error: error.message, fromFallback: false };
+    if (!rpcError && rpcData) {
+      return { data: rpcData as Technician, error: null, fromFallback: false };
     }
 
-    return { data: data as Technician, error: null, fromFallback: false };
+    // Fallback de atualização direta na tabela technicians se a RPC não estiver disponível
+    const updatePayload: Record<string, any> = {
+      name: techData.name,
+      phone: techData.phone,
+      email: techData.email,
+      primary_cre_id: techData.primary_cre_id,
+      latitude: techData.latitude,
+      longitude: techData.longitude,
+      radius_km: techData.radius_km,
+      max_active_tickets: techData.max_active_tickets,
+      status: techData.status || 'disponivel',
+      active: techData.active ?? true
+    };
+
+    if (resolvedId) {
+      const { data: updData, error: updErr } = await supabase
+        .from('technicians')
+        .update(updatePayload)
+        .eq('id', resolvedId)
+        .select()
+        .maybeSingle();
+      if (!updErr && updData) {
+        return { data: updData as Technician, error: null, fromFallback: false };
+      }
+    } else if (techData.email) {
+      const { data: updData, error: updErr } = await supabase
+        .from('technicians')
+        .update(updatePayload)
+        .eq('email', techData.email)
+        .select()
+        .maybeSingle();
+      if (!updErr && updData) {
+        return { data: updData as Technician, error: null, fromFallback: false };
+      }
+    }
+
+    return { data: techData as Technician, error: rpcError?.message || null, fromFallback: false };
   } catch (err: any) {
-    return { data: null, error: err.message, fromFallback: true };
+    return { data: techData as Technician, error: err.message, fromFallback: true };
+  }
+}
+
+/**
+ * Remove técnico de campo do Supabase (com suporte a soft-delete em caso de histórico de OS)
+ */
+export async function deleteRemoteTechnician(
+  id: string,
+  email?: string
+): Promise<RemoteServiceResult<boolean>> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: true, error: null, fromFallback: true };
+  }
+
+  try {
+    let targetId = isUuid(id) ? id : null;
+    if (!targetId && email) {
+      const { data: existing } = await supabase
+        .from('technicians')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+      if (existing?.id) targetId = existing.id;
+    }
+
+    // Tenta exclusão física direta
+    const filterCol = targetId ? 'id' : email ? 'email' : 'id';
+    const filterVal = targetId || email || id;
+
+    const { error: delErr } = await supabase
+      .from('technicians')
+      .delete()
+      .eq(filterCol, filterVal);
+
+    if (delErr) {
+      // Se houver chamados vinculados a esse técnico (violação de FK), aplica inativação (soft-delete)
+      console.warn('Exclusão física com restrição de FK, inativando técnico no banco:', delErr.message);
+      await supabase
+        .from('technicians')
+        .update({ active: false, status: 'indisponivel' })
+        .eq(filterCol, filterVal);
+    }
+
+    return { data: true, error: null, fromFallback: false };
+  } catch (err: any) {
+    return { data: false, error: err.message, fromFallback: true };
   }
 }
 
@@ -172,8 +277,24 @@ export async function saveRemoteSystemUserWithAuth(
   }
 
   try {
-    const { data, error } = await supabase.rpc('save_system_user_with_auth', {
-      p_id: userData.id && !userData.id.startsWith('user-') ? userData.id : null,
+    let resolvedId: string | null = isUuid(userData.id) ? userData.id! : null;
+    if (!resolvedId && userData.email) {
+      try {
+        const { data: existing } = await supabase
+          .from('system_users')
+          .select('id')
+          .eq('email', userData.email)
+          .maybeSingle();
+        if (existing?.id) {
+          resolvedId = existing.id;
+        }
+      } catch {
+        // ignora
+      }
+    }
+
+    const { data: rpcData, error: rpcError } = await supabase.rpc('save_system_user_with_auth', {
+      p_id: resolvedId,
       p_name: userData.name,
       p_phone: userData.phone,
       p_email: userData.email,
@@ -182,13 +303,88 @@ export async function saveRemoteSystemUserWithAuth(
       p_password: userData.password || null
     });
 
-    if (error) {
-      return { data: null, error: error.message, fromFallback: false };
+    if (!rpcError && rpcData) {
+      return { data: rpcData as SystemUser, error: null, fromFallback: false };
     }
 
-    return { data: data as SystemUser, error: null, fromFallback: false };
+    // Fallback de atualização direta na tabela system_users
+    const updatePayload: Record<string, any> = {
+      name: userData.name,
+      phone: userData.phone,
+      email: userData.email,
+      role: userData.role || 'controladoria',
+      active: userData.active ?? true
+    };
+
+    if (resolvedId) {
+      const { data: updData, error: updErr } = await supabase
+        .from('system_users')
+        .update(updatePayload)
+        .eq('id', resolvedId)
+        .select()
+        .maybeSingle();
+      if (!updErr && updData) {
+        return { data: updData as SystemUser, error: null, fromFallback: false };
+      }
+    } else if (userData.email) {
+      const { data: updData, error: updErr } = await supabase
+        .from('system_users')
+        .update(updatePayload)
+        .eq('email', userData.email)
+        .select()
+        .maybeSingle();
+      if (!updErr && updData) {
+        return { data: updData as SystemUser, error: null, fromFallback: false };
+      }
+    }
+
+    return { data: userData as SystemUser, error: rpcError?.message || null, fromFallback: false };
   } catch (err: any) {
-    return { data: null, error: err.message, fromFallback: true };
+    return { data: userData as SystemUser, error: err.message, fromFallback: true };
+  }
+}
+
+/**
+ * Remove usuário do sistema/administrador do Supabase (com suporte a soft-delete)
+ */
+export async function deleteRemoteSystemUser(
+  id: string,
+  email?: string
+): Promise<RemoteServiceResult<boolean>> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: true, error: null, fromFallback: true };
+  }
+
+  try {
+    let targetId = isUuid(id) ? id : null;
+    if (!targetId && email) {
+      const { data: existing } = await supabase
+        .from('system_users')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+      if (existing?.id) targetId = existing.id;
+    }
+
+    const filterCol = targetId ? 'id' : email ? 'email' : 'id';
+    const filterVal = targetId || email || id;
+
+    const { error: delErr } = await supabase
+      .from('system_users')
+      .delete()
+      .eq(filterCol, filterVal);
+
+    if (delErr) {
+      console.warn('Exclusão de usuário com restrição, aplicando inativação:', delErr.message);
+      await supabase
+        .from('system_users')
+        .update({ active: false })
+        .eq(filterCol, filterVal);
+    }
+
+    return { data: true, error: null, fromFallback: false };
+  } catch (err: any) {
+    return { data: false, error: err.message, fromFallback: true };
   }
 }
 
