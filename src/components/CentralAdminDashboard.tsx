@@ -22,7 +22,8 @@ import {
   CheckCircle2,
   Filter,
   Download,
-  DollarSign,
+  Ban,
+  Archive,
   Plus,
   Trash2,
   Edit,
@@ -253,6 +254,15 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
     const nextStatus =
       isNewTech && editTicketForm.status === 'aberto' ? 'despachado' : editTicketForm.status;
 
+    if (
+      nextStatus === 'cancelado' &&
+      editingTicket.status !== 'cancelado' &&
+      editTicketForm.notes.trim().length < 5
+    ) {
+      alert('Para cancelar a OS, descreva o motivo do cancelamento no campo de notas/parecer (mínimo 5 caracteres).');
+      return;
+    }
+
     if (onAdminUpdateTicket) {
       onAdminUpdateTicket(editingTicket.id, {
         status: nextStatus,
@@ -306,10 +316,25 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   };
 
   const handleQuickMoveStage = (ticket: Ticket, targetStatus: Ticket['status']) => {
-    if (onAdminUpdateTicket) {
-      onAdminUpdateTicket(ticket.id, { status: targetStatus });
+    if (!onAdminUpdateTicket) return;
+    if (targetStatus === 'cancelado') {
+      const reason = window.prompt(
+        `Cancelar a OS ${ticket.protocol}?\n\nInforme o motivo do cancelamento (obrigatório, ficará registrado no histórico):`
+      );
+      if (!reason || reason.trim().length < 5) {
+        if (reason !== null) alert('Informe um motivo com pelo menos 5 caracteres para cancelar a OS.');
+        return;
+      }
+      onAdminUpdateTicket(ticket.id, { status: 'cancelado', notes: `OS cancelada: ${reason.trim()}` });
+      return;
     }
+    onAdminUpdateTicket(ticket.id, { status: targetStatus });
   };
+
+  // Arquivo/Histórico de OS encerradas (Concluídas antigas e Canceladas)
+  const [archiveView, setArchiveView] = useState<null | 'concluidos' | 'cancelados'>(null);
+  const [archiveSearch, setArchiveSearch] = useState('');
+  const [archivePeriod, setArchivePeriod] = useState<'7' | '30' | '90' | 'todos'>('30');
 
 
   // Estados para Decisão de Orçamento (Aprovação ou Reprovação/Cancelamento)
@@ -496,12 +521,35 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   ).length;
   const pendingQuoteTickets = tickets.filter((t) => t.status === 'aguardando_orcamento').length;
   const completedTickets = tickets.filter((t) => t.status === 'concluido').length;
-  const totalBudgetSpent = tickets.reduce((acc, curr) => {
-    if (curr.quote && curr.quote.status === 'aprovado') {
-      return acc + curr.quote.total_amount;
-    }
-    return acc;
-  }, 0);
+  const cancelledTicketsList = tickets
+    .filter((t) => t.status === 'cancelado')
+    .sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime());
+  const activeTicketsCount = tickets.filter((t) => !['concluido', 'cancelado'].includes(t.status)).length;
+  const slaAtRiskCount = tickets.filter((t) => {
+    if (['concluido', 'cancelado'].includes(t.status)) return false;
+    const s = calculateTicketSla(t);
+    return s.status === 'em_risco' || s.status === 'estourado';
+  }).length;
+  const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
+  const completedThisMonth = tickets.filter(
+    (t) => t.status === 'concluido' && new Date(t.resolved_at || t.updated_at || t.created_at).getTime() >= startOfMonth
+  ).length;
+
+  // Concluídos: o Kanban mostra somente os finalizados nas últimas 48h; o restante vai para o Histórico
+  const RECENT_COMPLETED_WINDOW_MS = 48 * 60 * 60 * 1000;
+  const getClosedAt = (t: Ticket) => new Date(t.resolved_at || t.completion?.completed_at || t.updated_at || t.created_at).getTime();
+  const getCancelReason = (t: Ticket): string => {
+    if (t.quote?.status === 'rejeitado' && t.quote.decision_reason) return `Orçamento reprovado: ${t.quote.decision_reason}`;
+    const histCancel = (t.history || []).find((h) => h.to_status === 'cancelado' && h.note);
+    if (histCancel?.note) return histCancel.note;
+    if (t.quote?.status === 'rejeitado') return 'Orçamento reprovado pelo cliente/gestão.';
+    return t.notes || 'Motivo não informado.';
+  };
+  const getCancelAuthor = (t: Ticket): string => {
+    if (t.quote?.status === 'rejeitado' && t.quote.decision_by_name) return t.quote.decision_by_name;
+    const histCancel = (t.history || []).find((h) => h.to_status === 'cancelado');
+    return histCancel?.author_name || '—';
+  };
 
   // Colunas do Kanban em Sequência Cronológica Lógica (1 ➔ 5 sem retrocesso)
   const kanbanColumns = [
@@ -545,10 +593,12 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
     },
     {
       id: 'concluido',
-      title: '5. Concluídos & Assinados',
-      subtitle: 'Serviço finalizado com OS assinada',
+      title: '5. Concluídos (48h)',
+      subtitle: 'Finalizados recentemente • demais no Histórico',
       bgHeader: 'bg-emerald-100 text-emerald-900 border-emerald-300',
-      items: filteredTickets.filter((t) => t.status === 'concluido')
+      items: filteredTickets
+        .filter((t) => t.status === 'concluido' && Date.now() - getClosedAt(t) <= RECENT_COMPLETED_WINDOW_MS)
+        .sort((a, b) => getClosedAt(b) - getClosedAt(a))
     }
   ];
 
@@ -594,65 +644,35 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   };
 
   return (
-    <div className="space-y-6 animate-fadeIn">
-      {/* Top Bar de KPIs em Tempo Real */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
-          <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Total de Chamados</span>
-            <Building2 size={16} className="text-blue-600" />
-          </div>
-          <div className="text-2xl font-black text-slate-900">{totalTickets}</div>
-          <div className="text-[10px] text-slate-400 mt-1">14 Regionais DF</div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
-          <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Em Campo</span>
-            <Users size={16} className="text-blue-500" />
-          </div>
-          <div className="text-2xl font-black text-blue-700">{inProgressTickets}</div>
-          <div className="text-[10px] text-slate-400 mt-1">Técnicos em rota/diagnóstico</div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
-          <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Orçamentos Pendentes</span>
-            <AlertTriangle size={16} className="text-amber-500" />
-          </div>
-          <div className="text-2xl font-black text-amber-700">{pendingQuoteTickets}</div>
-          <div className="text-[10px] text-slate-400 mt-1">Aguardando aprovação</div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
-          <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Concluídos com OS</span>
-            <CheckCircle2 size={16} className="text-emerald-500" />
-          </div>
-          <div className="text-2xl font-black text-emerald-700">{completedTickets}</div>
-          <div className="text-[10px] text-slate-400 mt-1">Assinatura digital atestada</div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 col-span-2 md:col-span-1">
-          <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Total Homologado</span>
-            <DollarSign size={16} className="text-emerald-600" />
-          </div>
-          <div className="text-xl font-black text-slate-900">
-            R$ {totalBudgetSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </div>
-          <div className="text-[10px] text-slate-400 mt-1">Peças e serviços aprovados</div>
-  
-
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
-          <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Satisfação CSAT</span>
-            <Star size={16} className="text-amber-500 fill-amber-400" />
-          </div>
-          <div className="text-2xl font-black text-amber-600">{avgCsatRating} ★</div>
-          <div className="text-[10px] text-slate-400 mt-1">{ratedTickets.length} avaliações das escolas</div>
-        </div>
-      </div>
+    <div className="space-y-3 animate-fadeIn">
+      {/* Faixa compacta de KPIs operacionais (clicáveis) */}
+      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+        {[
+          { label: 'Em Aberto', value: activeTicketsCount, hint: `${totalTickets} no total`, icon: <Building2 size={14} className="text-blue-600" />, color: 'text-slate-900' },
+          { label: 'Em Campo', value: inProgressTickets, hint: 'Rota / atendimento', icon: <Users size={14} className="text-blue-500" />, color: 'text-blue-700' },
+          { label: 'Orç. Pendentes', value: pendingQuoteTickets, hint: 'Aguardando cliente', icon: <AlertTriangle size={14} className="text-amber-500" />, color: 'text-amber-700' },
+          { label: 'SLA em Risco', value: slaAtRiskCount, hint: 'Em risco ou estourado', icon: <Clock size={14} className="text-rose-500" />, color: slaAtRiskCount > 0 ? 'text-rose-700' : 'text-slate-900' },
+          { label: 'Concluídos (mês)', value: completedThisMonth, hint: `${completedTickets} no histórico`, icon: <CheckCircle2 size={14} className="text-emerald-500" />, color: 'text-emerald-700', onClick: () => { setActiveTab('kanban'); setArchiveView('concluidos'); } },
+          { label: 'Cancelados', value: cancelledTicketsList.length, hint: 'Ver motivos', icon: <Ban size={14} className="text-slate-500" />, color: 'text-slate-700', onClick: () => { setActiveTab('kanban'); setArchiveView('cancelados'); } },
+          { label: 'CSAT', value: `${avgCsatRating} ★`, hint: `${ratedTickets.length} avaliações`, icon: <Star size={14} className="text-amber-500 fill-amber-400" />, color: 'text-amber-600' }
+        ].map((kpi) => (
+          <button
+            key={kpi.label}
+            type="button"
+            onClick={kpi.onClick}
+            disabled={!kpi.onClick}
+            className={`bg-white px-3 py-2 rounded-xl shadow-xs border border-slate-200 text-left transition-colors ${kpi.onClick ? 'hover:border-blue-400 hover:bg-blue-50/40 cursor-pointer' : 'cursor-default'}`}
+          >
+            <div className="flex items-center justify-between text-slate-500">
+              <span className="text-[10px] font-bold uppercase tracking-wider truncate">{kpi.label}</span>
+              {kpi.icon}
+            </div>
+            <div className="flex items-baseline gap-1.5">
+              <span className={`text-lg font-black leading-tight ${kpi.color}`}>{kpi.value}</span>
+              <span className="text-[9.5px] text-slate-400 truncate">{kpi.hint}</span>
+            </div>
+          </button>
+        ))}
       </div>
 
       {/* Menu Superior do Dashboard */}
@@ -802,10 +822,153 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
               />
             </div>
 
-            <span className="ml-auto text-[11px] text-slate-400 font-medium">
-              Exibindo {filteredTickets.length} de {tickets.length} chamados
-            </span>
+            <div className="ml-auto flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setArchiveView(archiveView === 'concluidos' ? null : 'concluidos')}
+                className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold flex items-center gap-1 transition-colors ${
+                  archiveView === 'concluidos'
+                    ? 'bg-emerald-600 text-white border-emerald-600'
+                    : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
+                }`}
+              >
+                <Archive size={12} /> Histórico Concluídos ({completedTickets})
+              </button>
+              <button
+                type="button"
+                onClick={() => setArchiveView(archiveView === 'cancelados' ? null : 'cancelados')}
+                className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold flex items-center gap-1 transition-colors ${
+                  archiveView === 'cancelados'
+                    ? 'bg-slate-700 text-white border-slate-700'
+                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                }`}
+              >
+                <Ban size={12} /> Cancelados ({cancelledTicketsList.length})
+              </button>
+            </div>
           </div>
+
+          {/* Painel de Arquivo: Histórico de Concluídos / Canceladas (fora do Kanban para manter o quadro limpo) */}
+          {archiveView && (() => {
+            const periodMs = archivePeriod === 'todos' ? Infinity : Number(archivePeriod) * 24 * 60 * 60 * 1000;
+            const q = archiveSearch.trim().toLowerCase();
+            const source = archiveView === 'concluidos'
+              ? tickets.filter((t) => t.status === 'concluido').sort((a, b) => getClosedAt(b) - getClosedAt(a))
+              : cancelledTicketsList;
+            const rows = source.filter((t) => {
+              const inPeriod = Date.now() - getClosedAt(t) <= periodMs;
+              const matchCre = selectedCre === 'todas' || t.cre_name === selectedCre;
+              const matchQ =
+                !q ||
+                t.protocol.toLowerCase().includes(q) ||
+                t.school_name.toLowerCase().includes(q) ||
+                t.title.toLowerCase().includes(q) ||
+                (t.assigned_technician_name || '').toLowerCase().includes(q);
+              return inPeriod && matchCre && matchQ;
+            });
+            const isCancel = archiveView === 'cancelados';
+            return (
+              <div className={`bg-white rounded-2xl border shadow-sm overflow-hidden animate-fadeIn ${isCancel ? 'border-slate-300' : 'border-emerald-300'}`}>
+                <div className={`px-4 py-2.5 flex flex-wrap items-center gap-2 border-b ${isCancel ? 'bg-slate-50 border-slate-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                  <span className={`text-xs font-extrabold flex items-center gap-1.5 ${isCancel ? 'text-slate-800' : 'text-emerald-900'}`}>
+                    {isCancel ? <Ban size={14} /> : <Archive size={14} />}
+                    {isCancel ? 'OS Canceladas — motivo, responsável e data' : 'Histórico de OS Concluídas & Assinadas'}
+                  </span>
+                  <span className="text-[11px] text-slate-500">({rows.length} de {source.length})</span>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <select
+                      value={archivePeriod}
+                      onChange={(e) => setArchivePeriod(e.target.value as typeof archivePeriod)}
+                      className="bg-white border border-slate-300 rounded-lg px-1.5 py-1 text-[11px] font-semibold text-slate-700"
+                    >
+                      <option value="7">Últimos 7 dias</option>
+                      <option value="30">Últimos 30 dias</option>
+                      <option value="90">Últimos 90 dias</option>
+                      <option value="todos">Todo o período</option>
+                    </select>
+                    <input
+                      type="text"
+                      value={archiveSearch}
+                      onChange={(e) => setArchiveSearch(e.target.value)}
+                      placeholder="Buscar protocolo, escola, técnico..."
+                      className="w-52 bg-white border border-slate-300 rounded-lg px-2 py-1 text-[11px] text-slate-800 outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setArchiveView(null)}
+                      className="p-1 rounded-lg hover:bg-white text-slate-500"
+                      title="Fechar histórico"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
+                <div className="max-h-[320px] overflow-y-auto">
+                  <table className="w-full text-[11px] text-left">
+                    <thead className="bg-slate-50 text-slate-500 font-bold sticky top-0">
+                      <tr>
+                        <th className="px-3 py-1.5">Protocolo</th>
+                        <th className="px-3 py-1.5">Unidade Escolar</th>
+                        <th className="px-3 py-1.5">Técnico</th>
+                        <th className="px-3 py-1.5">{isCancel ? 'Cancelada em' : 'Concluída em'}</th>
+                        <th className="px-3 py-1.5">{isCancel ? 'Motivo / Responsável' : 'SLA / Assinado por'}</th>
+                        <th className="px-3 py-1.5 text-right">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {rows.map((t) => {
+                        const sla = calculateTicketSla(t);
+                        return (
+                          <tr key={t.id} className="hover:bg-slate-50">
+                            <td className="px-3 py-1.5 font-mono font-bold text-blue-700 whitespace-nowrap">{t.protocol}</td>
+                            <td className="px-3 py-1.5">
+                              <div className="font-semibold text-slate-800 truncate max-w-[220px]">{t.school_name}</div>
+                              <div className="text-[10px] text-slate-400 truncate max-w-[220px]">{t.title}</div>
+                            </td>
+                            <td className="px-3 py-1.5 text-slate-600">{t.assigned_technician_name || '—'}</td>
+                            <td className="px-3 py-1.5 text-slate-600 whitespace-nowrap">
+                              {new Date(getClosedAt(t)).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                            </td>
+                            <td className="px-3 py-1.5">
+                              {isCancel ? (
+                                <div className="max-w-[300px]">
+                                  <div className="text-rose-700 font-medium line-clamp-2" title={getCancelReason(t)}>{getCancelReason(t)}</div>
+                                  <div className="text-[10px] text-slate-400">por {getCancelAuthor(t)}</div>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded border ${sla.badgeColor}`}>{sla.label}</span>
+                                  <span className="text-[10px] text-slate-500 truncate max-w-[140px]">
+                                    {t.completion?.school_representative_name || ''}
+                                  </span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-1.5 text-right">
+                              <button
+                                type="button"
+                                onClick={() => onViewOS(t)}
+                                className="px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-[10px] font-bold"
+                              >
+                                Ver OS
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {rows.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="px-3 py-4 text-center text-slate-400 italic">
+                            Nenhuma OS encontrada para o período/filtro selecionado.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Banner de Disparo de Alerta WhatsApp para o Técnico recém-atribuído */}
           {recentDispatchedAlert && (
@@ -843,15 +1006,15 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
             </div>
           )}
 
-          {/* Colunas do Kanban */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-3.5 items-start">
+          {/* Colunas do Kanban (altura ajustada à tela, rolagem interna por coluna, sem espaço vazio) */}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-2.5 items-start">
             {kanbanColumns.map((col) => (
               <div
                 key={col.id}
-                className="bg-slate-100/90 rounded-2xl p-3 border border-slate-200 space-y-3 min-h-[480px]"
+                className="bg-slate-100/90 rounded-2xl p-2 border border-slate-200 flex flex-col md:max-h-[calc(100vh-230px)]"
               >
                 <div
-                  className={`px-3 py-2 rounded-xl border flex items-center justify-between ${col.bgHeader}`}
+                  className={`px-3 py-1.5 mb-2 rounded-xl border flex items-center justify-between shrink-0 ${col.bgHeader}`}
                 >
                   <div className="min-w-0">
                     <span className="text-xs font-extrabold block truncate">{col.title}</span>
@@ -862,8 +1025,37 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
                   </span>
                 </div>
 
-                <div className="space-y-2.5">
-                  {col.items.map((ticket) => (
+                <div className="space-y-2 overflow-y-auto pr-0.5 flex-1 min-h-0">
+                  {col.items.map((ticket) => col.id === 'concluido' ? (
+                    <div
+                      key={ticket.id}
+                      className="bg-white px-2.5 py-2 rounded-xl border border-emerald-200 hover:border-emerald-400 transition-all space-y-1"
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-mono text-[11px] font-bold text-blue-700">{ticket.protocol}</span>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${calculateTicketSla(ticket).badgeColor}`}>
+                          {calculateTicketSla(ticket).status === 'cumprido' ? 'No SLA' : 'Fora SLA'}
+                        </span>
+                      </div>
+                      <div className="text-[11px] font-semibold text-slate-800 truncate" title={ticket.school_name}>
+                        {ticket.school_name}
+                      </div>
+                      <div className="text-[10px] text-slate-500 truncate" title={ticket.title}>{ticket.title}</div>
+                      <div className="flex items-center justify-between text-[10px] text-slate-500">
+                        <span className="truncate">👷 {ticket.assigned_technician_name || '—'}</span>
+                        <span className="shrink-0">
+                          {new Date(getClosedAt(ticket)).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onViewOS(ticket)}
+                        className="w-full py-0.5 text-[10px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded transition-colors"
+                      >
+                        ✓ Ver OS Assinada
+                      </button>
+                    </div>
+                  ) : (
                     <div
                       key={ticket.id}
                       className="bg-white p-3.5 rounded-xl shadow-sm border border-slate-200 hover:border-blue-400 transition-all space-y-2 group"
