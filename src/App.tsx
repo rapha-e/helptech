@@ -167,7 +167,7 @@ export const App: React.FC = () => {
 
       {/* HEADER INSTITUCIONAL GLOBAL */}
       <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40 shadow-md">
-        <div className="max-w-[1440px] mx-auto px-3 sm:px-6 py-2.5 flex flex-col md:flex-row items-center justify-between gap-3">
+        <div className="w-full max-w-[1920px] mx-auto px-2.5 sm:px-4 lg:px-6 py-2 flex flex-col md:flex-row items-center justify-between gap-2.5">
           {/* Marca / Identidade */}
           <div className="flex items-center gap-3">
             <img
@@ -301,7 +301,7 @@ export const App: React.FC = () => {
       </header>
 
       {/* ÁREA DE CONTEÚDO PRINCIPAL (ESCOLA ABERTA / RESTRIÇÃO CONDICIONAL POR ABA) */}
-      <main className="flex-1 max-w-[1440px] w-full mx-auto px-3 sm:px-6 py-4">
+      <main className="flex-1 w-full max-w-[1920px] mx-auto px-2.5 sm:px-4 lg:px-6 py-2.5">
         <Suspense fallback={<ViewSkeletonFallback />}>
           {/* MÓDULO 1: UNIDADES ESCOLARES (100% PÚBLICO E ABERTO) */}
           {activeViewRole === 'ROLE_SCHOOL' && (
@@ -438,8 +438,8 @@ export const App: React.FC = () => {
       </Suspense>
 
       {/* FOOTER */}
-      <footer className="bg-slate-900 border-t border-slate-800 text-slate-400 py-3 text-center text-[11px]">
-        <div className="max-w-[1440px] mx-auto px-3 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <footer className="bg-slate-900 border-t border-slate-800 text-slate-400 py-2.5 text-center text-[11px]">
+        <div className="w-full max-w-[1920px] mx-auto px-2.5 sm:px-4 lg:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
             <span>HelpTech Informática &bull; Sistema Proprietário de Gestão de Suporte & Field Service</span>
