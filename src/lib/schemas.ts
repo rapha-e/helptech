@@ -11,6 +11,7 @@ export const ticketSubmissionSchema = z.object({
   requester_phone: z
     .string()
     .min(10, 'Informe um telefone de contato válido com DDD (WhatsApp)'),
+  requester_email: z.string().email('E-mail institucional inválido').optional().or(z.literal('')),
   title: z
     .string()
     .min(5, 'Título resumido deve ter pelo menos 5 caracteres')

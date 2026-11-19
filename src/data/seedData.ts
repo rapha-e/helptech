@@ -148,6 +148,7 @@ export interface Ticket {
   requester_name: string;
   requester_role: string;
   requester_phone: string;
+  requester_email?: string;
   title: string;
   description: string;
   equipment_patrimony?: string;

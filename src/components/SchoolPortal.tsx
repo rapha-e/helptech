@@ -94,6 +94,7 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
     requester_name: '',
     requester_role: 'Diretor(a) Escolar',
     requester_phone: '',
+    requester_email: '',
     category_id: categories[0]?.id || '',
     title: '',
     description: '',
@@ -541,6 +542,7 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                       requester_name: '',
                       requester_role: 'Diretor(a) Escolar',
                       requester_phone: '',
+                      requester_email: '',
                       category_id: categories[0]?.id || '',
                       title: '',
                       description: '',
@@ -830,6 +832,24 @@ export const SchoolPortal: React.FC<SchoolPortalProps> = ({
                             {formErrors.requester_phone}
                           </p>
                         )}
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          E-mail Institucional para Receber Cópias & Notificações da OS (Opcional)
+                        </label>
+                        <input
+                          type="email"
+                          value={formData.requester_email || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, requester_email: e.target.value })
+                          }
+                          placeholder="ex: direcao.escola@se.df.gov.br (se vazio, usa o e-mail cadastrado da escola)"
+                          className="w-full p-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-800"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          A central HelpTech encaminhará automaticamente o comprovante de abertura e o termo de encerramento para este e-mail.
+                        </p>
                       </div>
                     </div>
                   </div>

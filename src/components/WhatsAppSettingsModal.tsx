@@ -9,7 +9,8 @@ import {
   Shield,
   Zap,
   Sliders,
-  Terminal
+  Terminal,
+  Mail
 } from 'lucide-react';
 import {
   getWhatsAppConfig,
@@ -19,6 +20,14 @@ import {
   type WhatsAppConfig,
   type WhatsAppLogEntry
 } from '../lib/whatsappService';
+import {
+  HELPTECH_CENTRAL_EMAIL,
+  getEmailConfig,
+  saveEmailConfig,
+  getEmailLogs,
+  type EmailConfig,
+  type EmailLogEntry
+} from '../lib/emailService';
 
 interface WhatsAppSettingsModalProps {
   onClose: () => void;
@@ -27,7 +36,9 @@ interface WhatsAppSettingsModalProps {
 export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ onClose }) => {
   const [config, setConfig] = useState<WhatsAppConfig>(getWhatsAppConfig);
   const [logs, setLogs] = useState<WhatsAppLogEntry[]>(getWhatsAppLogs);
-  const [activeTab, setActiveTab] = useState<'config' | 'test' | 'logs'>('config');
+  const [emailConfig, setEmailConfig] = useState<EmailConfig>(getEmailConfig);
+  const [emailLogs, setEmailLogs] = useState<EmailLogEntry[]>(getEmailLogs);
+  const [activeTab, setActiveTab] = useState<'config' | 'test' | 'logs' | 'emails'>('config');
 
   // Teste de Disparo
   const [testPhone, setTestPhone] = useState('');
@@ -36,6 +47,7 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ on
 
   // Status de salvamento
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveEmailSuccess, setSaveEmailSuccess] = useState(false);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -144,7 +156,22 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ on
             }`}
           >
             <Terminal size={13} />
-            Auditoria / Logs ({logs.length})
+            Logs WhatsApp ({logs.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setEmailLogs(getEmailLogs());
+              setActiveTab('emails');
+            }}
+            className={`flex items-center gap-1.5 px-4 py-2 font-bold text-xs border-b-2 transition-all ${
+              activeTab === 'emails'
+                ? 'border-blue-600 text-blue-700 bg-white rounded-t-xl'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Mail size={13} />
+            E-mails Automáticos ({emailLogs.length})
           </button>
         </div>
 
@@ -466,6 +493,185 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ on
                   ))}
                 </div>
               )}
+            </div>
+          )}
+          {activeTab === 'emails' && (
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 p-4 rounded-2xl text-blue-900 leading-relaxed">
+                <span className="font-extrabold block text-xs mb-1">
+                  Fluxo de E-mails Automáticos Ativo (Sem Ação Humana)
+                </span>
+                A cada nova solicitação registrada ou técnico designado, o sistema gera o template oficial em HTML e despacha automaticamente para 3 destinatários:
+                <ul className="list-disc pl-5 mt-1.5 space-y-0.5 text-[11px]">
+                  <li>
+                    <strong>Central HelpTech (Fixa):</strong>{' '}
+                    <code className="bg-blue-100 px-1 py-0.5 rounded font-mono font-bold">
+                      {HELPTECH_CENTRAL_EMAIL}
+                    </code>
+                  </li>
+                  <li>
+                    <strong>Solicitante / Escola:</strong> e-mail informado no formulário ou e-mail institucional oficial da unidade escolar.
+                  </li>
+                  <li>
+                    <strong>Técnico Designado:</strong> e-mail do técnico atribuído por proximidade geodésica ou despacho manual.
+                  </li>
+                </ul>
+              </div>
+
+              {/* Configuração do Provedor de E-mail */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  saveEmailConfig(emailConfig);
+                  setSaveEmailSuccess(true);
+                  setTimeout(() => setSaveEmailSuccess(false), 2500);
+                }}
+                className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-700 text-xs uppercase tracking-wider">
+                    Provedor de E-mails Transacionais
+                  </span>
+                  <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                    {emailConfig.provider === 'resend' ? 'Resend API Ativo' : 'Modo Simulado / Dev'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEmailConfig({ ...emailConfig, provider: 'simulated' })}
+                    className={`text-left p-3 rounded-xl border-2 transition-all ${
+                      emailConfig.provider === 'simulated'
+                        ? 'border-blue-500 bg-blue-50/50'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <span className="font-extrabold text-slate-800 block text-xs">Modo Simulado / Dev</span>
+                    <span className="text-[10.5px] text-slate-500">Registra no histórico local sem custo de API.</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEmailConfig({ ...emailConfig, provider: 'resend' })}
+                    className={`text-left p-3 rounded-xl border-2 transition-all ${
+                      emailConfig.provider === 'resend'
+                        ? 'border-blue-500 bg-blue-50/50'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <span className="font-extrabold text-slate-800 block text-xs">Resend API (Produção)</span>
+                    <span className="text-[10.5px] text-slate-500">Disparo real com alta entregabilidade via API key.</span>
+                  </button>
+                </div>
+
+                {emailConfig.provider === 'resend' && (
+                  <div className="space-y-2 pt-1 animate-fadeIn">
+                    <div>
+                      <label className="block font-semibold text-slate-600 text-[11px] mb-0.5">
+                        Resend API Key *
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        value={emailConfig.resendApiKey || ''}
+                        onChange={(e) => setEmailConfig({ ...emailConfig, resendApiKey: e.target.value })}
+                        placeholder="re_123456789..."
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono text-xs focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-600 text-[11px] mb-0.5">
+                        Remetente Configurado (From)
+                      </label>
+                      <input
+                        type="text"
+                        value={emailConfig.fromEmail || ''}
+                        onChange={(e) => setEmailConfig({ ...emailConfig, fromEmail: e.target.value })}
+                        placeholder="HelpTech Notificações <notificacoes@helptech.com.br>"
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-2">
+                  {saveEmailSuccess ? (
+                    <span className="text-emerald-600 font-bold flex items-center gap-1.5 text-xs">
+                      <CheckCircle2 size={14} /> Configurações de e-mail salvas!
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 text-[11px]">Automação 100% pronta para envio.</span>
+                  )}
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-all shadow-xs flex items-center gap-1.5 text-xs"
+                  >
+                    <CheckCircle2 size={14} /> Salvar Parâmetros de E-mail
+                  </button>
+                </div>
+              </form>
+
+              {/* Histórico de E-mails Disparados */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-slate-500">
+                  <span className="font-bold text-xs">Histórico dos E-mails Disparados ({emailLogs.length})</span>
+                  <button
+                    type="button"
+                    onClick={() => setEmailLogs(getEmailLogs())}
+                    className="text-blue-700 hover:underline flex items-center gap-1 font-semibold text-xs"
+                  >
+                    <RefreshCw size={12} /> Atualizar Histórico
+                  </button>
+                </div>
+
+                {emailLogs.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 bg-slate-50 rounded-2xl border border-slate-200">
+                    Nenhum e-mail disparado ainda. Abra um novo chamado no Portal da Escola para visualizar o disparo automático aqui.
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {emailLogs.map((log) => (
+                      <div
+                        key={log.id}
+                        className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-1.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                                log.status === 'enviado'
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                  : log.status === 'simulado'
+                                  ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                                  : 'bg-rose-100 text-rose-800 border border-rose-300'
+                              }`}
+                            >
+                              {log.status}
+                            </span>
+                            <span className="font-extrabold text-slate-800 text-xs">
+                              {log.subject}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {new Date(log.timestamp).toLocaleTimeString('pt-BR')}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-600 flex items-center gap-1">
+                          <strong className="text-slate-700">Para:</strong>{' '}
+                          <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-[10.5px]">
+                            {log.recipients.join(', ')}
+                          </span>
+                          {log.ticketProtocol && (
+                            <span className="ml-auto font-mono text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+                              {log.ticketProtocol}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

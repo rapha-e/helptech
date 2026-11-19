@@ -55,6 +55,7 @@ import {
   notifySchoolQuoteSubmission,
   notifySchoolCompletion
 } from './whatsappService';
+import { sendNewTicketNotificationEmails } from './emailService';
 import { validateStateTransition } from './stateMachine';
 
 const TICKETS_STORAGE_KEY = 'helptechinfo_tickets_v2';
@@ -750,6 +751,7 @@ export function useAppStore() {
       requester_name: data.requester_name,
       requester_role: data.requester_role,
       requester_phone: data.requester_phone,
+      requester_email: data.requester_email || school?.contact_email,
       title: data.title,
       description: data.description,
       equipment_patrimony: data.equipment_patrimony || undefined,
@@ -774,6 +776,18 @@ export function useAppStore() {
       saveStoredTickets(next);
       return next;
     });
+
+    // Disparo automático obrigatório de e-mails para Central HelpTech, Solicitante e Técnico Designado
+    try {
+      sendNewTicketNotificationEmails({
+        ticket: newTicket,
+        tech: candidate?.technician,
+        requesterEmail: data.requester_email,
+        schoolContactEmail: school?.contact_email
+      }).catch((err) => console.warn('Falha no envio de e-mails da nova solicitação:', err));
+    } catch (err) {
+      console.warn('Erro ao disparar notificações de e-mail:', err);
+    }
 
     // Gravação assíncrona remota no Supabase
     createRemoteTicket(newTicket, {
@@ -1769,6 +1783,24 @@ export function useAppStore() {
       }
     } catch (err) {
       console.warn('Erro no gatilho WhatsApp de despacho:', err);
+    }
+
+    // Disparo de e-mail de confirmação de técnico designado para Central, Solicitante e Técnico
+    try {
+      const foundTicket = tickets.find((t) => t.id === ticketId);
+      if (foundTicket) {
+        sendNewTicketNotificationEmails({
+          ticket: {
+            ...foundTicket,
+            status: 'despachado',
+            assigned_technician_id: tech.id,
+            assigned_technician_name: tech.name
+          },
+          tech
+        }).catch((err) => console.warn('Erro disparo e-mail despacho:', err));
+      }
+    } catch (err) {
+      console.warn('Erro no gatilho de e-mail de despacho:', err);
     }
   };
 
