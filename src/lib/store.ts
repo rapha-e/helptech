@@ -49,6 +49,12 @@ import {
   deleteRemoteTechnician,
   deleteRemoteSystemUser
 } from './masterDataService';
+import {
+  getWhatsAppConfig,
+  notifyTechnicianDispatch,
+  notifySchoolQuoteSubmission,
+  notifySchoolCompletion
+} from './whatsappService';
 import { validateStateTransition } from './stateMachine';
 
 const TICKETS_STORAGE_KEY = 'helptechinfo_tickets_v2';
@@ -1122,6 +1128,33 @@ export function useAppStore() {
     });
 
     submitQuoteRemote(ticketId, technicianId, data.technical_diagnosis, items);
+
+    // Disparo automático WhatsApp Business para o Diretor/Gestor da Escola
+    try {
+      const cfg = getWhatsAppConfig();
+      if (cfg.autoQuote) {
+        const foundTicket = tickets.find((t) => t.id === ticketId);
+        if (foundTicket) {
+          notifySchoolQuoteSubmission({
+            ...foundTicket,
+            status: 'aguardando_orcamento',
+            quote: {
+              id: quoteId,
+              ticket_id: ticketId,
+              technician_id: technicianId,
+              technician_name: tech?.name || 'Técnico Credenciado',
+              total_amount: Math.round(totalAmount * 100) / 100,
+              technical_diagnosis: data.technical_diagnosis,
+              status: 'pendente',
+              created_at: nowIso,
+              items
+            }
+          }).catch((err) => console.warn('Erro disparo WhatsApp orçamento:', err));
+        }
+      }
+    } catch (err) {
+      console.warn('Erro no gatilho WhatsApp de orçamento:', err);
+    }
   };
 
   /**
@@ -1284,6 +1317,33 @@ export function useAppStore() {
       data.school_representative_doc,
       data.signature_svg
     );
+
+    // Disparo automático WhatsApp Business para o Diretor/Gestor da Escola com Termo e CSAT
+    try {
+      const cfg = getWhatsAppConfig();
+      if (cfg.autoCompletion) {
+        const foundTicket = tickets.find((t) => t.id === ticketId);
+        if (foundTicket) {
+          notifySchoolCompletion({
+            ...foundTicket,
+            status: 'concluido',
+            completion: {
+              id: completionId,
+              ticket_id: ticketId,
+              technician_id: technicianId,
+              technician_name: tech?.name || foundTicket.assigned_technician_name || 'Técnico Responsável',
+              service_summary: data.service_summary,
+              school_representative_name: data.school_representative_name,
+              school_representative_doc: data.school_representative_doc,
+              signature_svg: data.signature_svg,
+              completed_at: nowIso
+            }
+          }).catch((err) => console.warn('Erro disparo WhatsApp conclusão:', err));
+        }
+      }
+    } catch (err) {
+      console.warn('Erro no gatilho WhatsApp de conclusão:', err);
+    }
 
     return true;
   };
@@ -1689,6 +1749,27 @@ export function useAppStore() {
       },
       { name: 'Operador da Central', role: 'ROLE_ADMIN' }
     );
+
+    // Disparo automático WhatsApp Business para o Técnico despachado (com rota GPS)
+    try {
+      const cfg = getWhatsAppConfig();
+      if (cfg.autoDispatch) {
+        const foundTicket = tickets.find((t) => t.id === ticketId);
+        if (foundTicket) {
+          notifyTechnicianDispatch(
+            {
+              ...foundTicket,
+              status: 'despachado',
+              assigned_technician_id: tech.id,
+              assigned_technician_name: tech.name
+            },
+            tech
+          ).catch((err) => console.warn('Erro disparo WhatsApp despacho:', err));
+        }
+      }
+    } catch (err) {
+      console.warn('Erro no gatilho WhatsApp de despacho:', err);
+    }
   };
 
   /**

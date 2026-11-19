@@ -37,8 +37,10 @@ import {
   BarChart3,
   Clock,
   Star,
-  Package
+  Package,
+  MessageSquare
 } from 'lucide-react';
+import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
 import {
   calculateTicketSla,
   calculateSlaReport,
@@ -344,6 +346,9 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
   // Estado para Confirmação Segura de Reset de Dados
   const [showResetConfirmModal, setShowResetConfirmModal] = useState<boolean>(false);
   const [resetConfirmText, setResetConfirmText] = useState<string>('');
+
+  // Estado para Modal de Configuração do WhatsApp Business API
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState<boolean>(false);
 
   // Estados para Gestão de Técnicos (CRUD)
   const [searchTech, setSearchTech] = useState('');
@@ -753,6 +758,14 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
             title="Emissão do Relatório Oficial de Prestação de Contas Auditoria & Governança HelpTech"
           >
             <FileSpreadsheet size={14} className="text-emerald-600" /> Relatório Oficial Auditoria Interna
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowWhatsAppModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 shadow-xs"
+            title="Configuração, Testes e Logs da WhatsApp Business API"
+          >
+            <MessageSquare size={14} className="text-emerald-600" /> WhatsApp Business API
           </button>
 
         </div>
@@ -3161,6 +3174,11 @@ export const CentralAdminDashboard: React.FC<CentralAdminDashboardProps> = ({
         regions={regions}
         onClose={() => setShowAuditReportModal(false)}
       />
+
+      {/* MODAL DE CONFIGURAÇÃO E MONITORAMENTO DO WHATSAPP BUSINESS API */}
+      {showWhatsAppModal && (
+        <WhatsAppSettingsModal onClose={() => setShowWhatsAppModal(false)} />
+      )}
     </div>
   );
 };
